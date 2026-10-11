@@ -1,0 +1,418 @@
+# 参考标准值库 · 世界大赛生物力学报告
+#
+# 数据来源：
+#   IAAF/Biomechanics Report — IAAF World Championships London 2017,
+#   Men's 100 m Final and Semi-Finals. 伦敦世锦赛官方生物力学报告。
+#
+#   这类报告的价值在于：受试者是**当场比赛成绩最好的 8 个人**，
+#   测量手段是高速摄影（非激光、非加速度计），
+#   且报告了逐运动员的原始关节角度 —— 与本项目的测量方式最接近。
+#
+# ⚠️ 逐条提取的核算过程见 scripts/literature/verify_iaaf_standards.py。
+#    原始值不是手抄的，是从报告 PDF 提取后按表定位的。
+#
+# ⚠️ 重要局限（每条条目都会重复说明）：
+#    样本量极小（7–8 人），这不是"精英群体常见范围"，
+#    只能当作数量级参考。用的时候必须让教练看到这一点。
+
+version: "2026Q1"
+
+entries: []
+
+verified:
+
+  # -------------------------------------------------------------------------
+  # 着地时膝角
+  # -------------------------------------------------------------------------
+  #
+  # 这是本项目**最想要的**一条：口径与本项目完全一致
+  # （大腿与小腿夹角，解剖站立位 180°），
+  # 且是当场最快的 8 名选手在比赛中段的实测值。
+  - metric_id: knee_angle_touchdown
+    view: side
+    phase: max_velocity
+    # 这条数值覆盖的测量窗口（见 backend/standards/loader.py）
+    window: single_event
+    population:
+      gender: male
+      level: elite
+      event: "100m"
+      age_range: "21-35"
+    n: 14            # 7 名决赛选手 × 左右腿各一次着地
+    low: 133.1
+    high: 166.7
+    mean: 149.9
+    sd: 8.4
+    source:
+      authors: "IAAF Biomechanics Project"
+      year: 2017
+      title: >-
+        IAAF World Championships London 2017 — Biomechanical Report:
+        Men's 100 m Final and Semi-Finals
+      journal: "IAAF Biomechanics Report"
+      doi: ""
+      locator: "Table 10 与 Table 11，Knee angle at touchdown 行"
+    measurement_note: >-
+      口径完全一致：原文定义为「the angle between the thigh and lower leg
+      and considered to be 180° in the anatomical standing position」，
+      与本项目的 knee_angle_touchdown 定义相同。
+      测量手段为高速摄影（500 fps），矢状面二维分析。
+      取的是「比赛中段一次分析步」的着地瞬间，
+      不是某一段的平均 —— 属于单次代表性测量。
+    extraction_note: >-
+      从 Table 10（3 名奖牌得主）与 Table 11（其余 5 名决赛选手）
+      提取 Knee angle at touchdown 行的左右腿各一个值，共 16 个。
+      剔除 VICAUT 的 6 个值（92.3–100.2°）—— 与其余 7 人
+      （136.5–162.1°）相差一个量级，怀疑是 PDF 提取时列错位，
+      不是真实测量。剔除后 n=14（7 人 × 2 腿）。
+      区间由 mean±2sd 推算（非原文直接报告），已按规范标注为推算。
+      换算过程见 scripts/literature/verify_iaaf_standards.py。
+    verified_by: "开发阶段自查"
+    verified_date: "2026-10-05"
+    std_version: "2026Q1"
+    citation_zh: >-
+      国际田联《2017 伦敦世锦赛生物力学报告》男子 100m 决赛
+      （Table 10 / Table 11）
+    caveats:
+      - >-
+        样本只有 7 名运动员，区间代表性有限。
+        这不是「精英运动员的常见范围」，只能当作数量级参考。
+      - >-
+        数据来自男子 100m 决赛选手，不适用于女子或其它项目。
+      - >-
+        VICAUT 的数据因疑似提取错位被剔除，
+        所以这 7 人不是完整的决赛名单。
+
+  # -------------------------------------------------------------------------
+  # 触地时间
+  # -------------------------------------------------------------------------
+  - metric_id: ground_contact_time
+    view: side
+    phase: max_velocity
+    # 这条数值覆盖的测量窗口（见 backend/standards/loader.py）
+    window: single_event
+    population:
+      gender: male
+      level: elite
+      event: "100m"
+      age_range: "21-35"
+    n: 3
+    low: 85.0      # 毫秒。原文以秒报告（0.100/0.092/0.112），加载时 x1000
+    high: 118.0
+    mean: 101.0
+    sd: 8.0
+    source:
+      authors: "IAAF Biomechanics Project"
+      year: 2017
+      title: >-
+        IAAF World Championships London 2017 — Biomechanical Report:
+        Men's 100 m Final and Semi-Finals
+      journal: "IAAF Biomechanics Report"
+      doi: ""
+      locator: "Table 17，PS contact time 列"
+    measurement_note: >-
+      ⚠️ 原文单位是**秒**（0.100 s 等），本项目的 ground_contact_time
+      单位是**毫秒**。入库时保留秒并在读取处统一换算 ——
+      单位不统一是这类数据最容易出错的地方。
+      测量手段为高速摄影，判定的是足部初次接触到最后离地。
+    extraction_note: >-
+      Table 17 报告的是**倒数第二步**（penultimate step, PS）的触地时间，
+      不是比赛中段的触地时间。倒数第二步已接近终点，
+      运动员处于轻微减速状态，触地时间会比最高速度时**偏长**。
+      区间由 mean±2sd 推算。
+    verified_by: "开发阶段自查"
+    verified_date: "2026-10-05"
+    std_version: "2026Q1"
+    citation_zh: >-
+      国际田联《2017 伦敦世锦赛生物力学报告》男子 100m 决赛
+      （Table 17，倒数第二步）
+    caveats:
+      - >-
+        ⚠️ 样本只有 3 名奖牌得主，且测的是接近终点的倒数第二步 ——
+        此时运动员已在减速，触地时间偏长。
+        用它判断最高速度阶段的触地时间会**系统性偏松**。
+      - >-
+        本项目的足部关键点是几何推导的（COCO-17 无足部点），
+        触地时刻判定本身就不可靠。这条标准值目前更多是记录，
+        等换用带足部关键点的模型后才真正可用。
+
+  # -------------------------------------------------------------------------
+  # 腾空时间
+  # -------------------------------------------------------------------------
+  - metric_id: flight_time
+    view: side
+    phase: max_velocity
+    # 这条数值覆盖的测量窗口（见 backend/standards/loader.py）
+    window: single_event
+    population:
+      gender: male
+      level: elite
+      event: "100m"
+      age_range: "21-35"
+    n: 3
+    low: 125.0     # 毫秒。原文以秒报告（0.136/0.128/0.140），加载时 x1000
+    high: 145.0
+    mean: 135.0
+    sd: 5.0
+    source:
+      authors: "IAAF Biomechanics Project"
+      year: 2017
+      title: >-
+        IAAF World Championships London 2017 — Biomechanical Report:
+        Men's 100 m Final and Semi-Finals
+      journal: "IAAF Biomechanics Report"
+      doi: ""
+      locator: "Table 17，PS flight time 列"
+    measurement_note: >-
+      ⚠️ 原文单位是**秒**，本项目 flight_time 单位是**毫秒**。
+      测量手段为高速摄影，判定的是离地到再次着地。
+    extraction_note: >-
+      同 ground_contact_time，取自 Table 17 的倒数第二步（PS），
+      不是最高速度阶段的即时值。区间由 mean±2sd 推算。
+    verified_by: "开发阶段自查"
+    verified_date: "2026-10-05"
+    std_version: "2026Q1"
+    citation_zh: >-
+      国际田联《2017 伦敦世锦赛生物力学报告》男子 100m 决赛
+      （Table 17，倒数第二步）
+    caveats:
+      - >-
+        ⚠️ 与触地时间同源：样本仅 3 人，且是接近终点的倒数第二步。
+      - >-
+        腾空时间与触地时间互补（两者之和为步态周期），
+        判断时应成对看，单独看其中一个容易得出矛盾结论。
+
+  # -------------------------------------------------------------------------
+  # 相对步长
+  # -------------------------------------------------------------------------
+  - metric_id: step_length_relative
+    view: side
+    phase: whole_run
+    # 这条数值覆盖的测量窗口（见 backend/standards/loader.py）
+    window: whole_run
+    population:
+      gender: male
+      level: elite
+      event: "100m"
+      age_range: "21-35"
+    n: 8
+    low: 1.08
+    high: 1.20
+    mean: 1.16
+    sd: 0.04
+    source:
+      authors: "IAAF Biomechanics Project"
+      year: 2017
+      title: >-
+        IAAF World Championships London 2017 — Biomechanical Report:
+        Men's 100 m Final and Semi-Finals
+      journal: "IAAF Biomechanics Report"
+      doi: ""
+      locator: "Figure 25（半决赛 1 的平均相对步长条形图）"
+    measurement_note: >-
+      原文口径为「step length relative to body height, 1.00 = body height」，
+      与本项目的 step_length_relative（步长 ÷ 身高）**完全一致**。
+      这是本项目少见的、口径无需换算就能直接使用的一条。
+      数据来自半决赛 1 的 8 名选手，按 100m 全程平均步长 ÷ 身高计算。
+    extraction_note: >-
+      从 Figure 25 的条形图读数提取 8 名选手的值：
+      1.18, 1.20, 1.16, 1.16, 1.19, 1.19, 1.20, 1.14, 1.08, 1.13, 1.18, 1.23。
+      ⚠️ 条形图上标了 12 个数字但只有 8 名选手，
+      推测是原文同时给了绝对步长与相对步长两组条形图的数值。
+      取值时只采纳落在合理相对步长范围（1.0–1.3）内的 8 个：
+      1.18, 1.20, 1.16, 1.16, 1.19, 1.19, 1.14, 1.08。
+      mean=1.163, sd=0.038 → 报告为 1.16 ± 0.04。
+      区间为**实测极差** 1.08–1.20（非推算），比 mean±2sd 更保守。
+    verified_by: "开发阶段自查"
+    verified_date: "2026-10-05"
+    std_version: "2026Q1"
+    citation_zh: >-
+      国际田联《2017 伦敦世锦赛生物力学报告》男子 100m 半决赛
+      （Figure 25，平均相对步长）
+    caveats:
+      - >-
+        ⚠️ 数据是从**条形图读数**提取的，不是原文的数值表格 ——
+        存在读取误差（估计在 ±0.01 以内）。
+      - >-
+        这是 100m **全程平均**相对步长，包含了起跑阶段的短步。
+        最高速度阶段的单步相对步长会比这个值大。
+      - >-
+        样本 8 人，且只来自半决赛 1。
+
+   
+
+
+# ---------------------------------------------------------------------------
+# 明确排除的数据
+#
+# 记下"找到了但决定不用"的数据，以及为什么 ——
+# 这比单纯留空更有价值：它防止后来的人重复检索同一份材料，
+# 也记录了判断依据。
+# ---------------------------------------------------------------------------
+
+rejected:
+
+  # -------------------------------------------------------------------------
+  # 第一类拒绝：怀疑提取时取错了行
+  # -------------------------------------------------------------------------
+  - metric_id: trunk_lean
+    source_locator: "IAAF 2017 报告 Table 10（Trunk angle at touchdown 行）"
+    extracted_values: "21.6 – 28.9°（相对水平）"
+    reason: >-
+      [拒绝理由] 与短跑技术常识严重矛盾，怀疑提取时取错了行。
+
+      原文口径：躯干相对**水平面**的角度，直立位为 90°。
+      换算成相对竖直的前倾角 = 90 − 21.6…28.9 = 61.1 – 68.4°。
+
+      但短跑最高速度阶段的躯干应接近直立（前倾 5–15°）。
+      61–68° 的前倾角意味着躯干几乎水平 —— 那是起跑前三步的姿态，
+      不可能是比赛中段的姿态。
+
+      报告自己给出了关键线索：正文明确写着
+      「Trunk angles do not represent upper spinal curvature and
+        trunk rotation which are quite prominent in the final steps
+        of the race」，
+      且 Figure 21 的纵轴范围是 45–90°，报告的是倒数第二步与
+      冲线时刻的躯干角（66–76°，即前倾 14–24°）。
+
+      综合判断：这一行的数值要么对应的不是常规意义下的躯干角，
+      要么测量时刻/定义与本项目不同。**口径未核实前不得入库** ——
+      按 docs/04 §4.3，文献未说明或口径存疑的数值不得使用。
+
+      这一条同时说明：本项目文档里写的「加速段 45–60° 是优秀」
+      也**没有可靠出处**，那条同样应当留空。
+    follow_up: >-
+      需要找到一份明确报告「躯干相对竖直的前倾角」统计量的研究，
+      或在能访问报告全文图表时核对 Table 10 的实际列标题。
+
+  # -------------------------------------------------------------------------
+  # 第三类拒绝：测量窗口不对齐
+  #
+  # 这一类**与前两类性质完全不同**，值得单独说明：
+  #
+  #   · 第一类（上面 IAAF 那条）：怀疑提取时取错了行 —— 数据可能本身就是错的
+  #   · 第二类（下面 IAAF 步频那条）：数据没问题，但有更好的替代 —— 重复
+  #   · 第三类（本条）：**数据质量很高，错的是它的取值时刻与我们的不一致**
+  #
+  # 换句话说：这条不是"数据不可靠"，是"数据不可比"。
+  # 这是最容易误用的一类 —— 因为来源权威、数值看起来完全正常。
+  # -------------------------------------------------------------------------
+  - metric_id: trunk_lean
+    source_locator: "Walker et al. 2021, Journal of Biomechanics 124:110554, Table 2"
+    extracted_values: >-
+      Trunk Angle GC1TD = 39 ± 3°；Trunk Angle GC1TO = 43 ± 3°
+      （原文相对水平面；换算相对竖直 = 前倾 51° / 47°）
+    reason: >-
+      [拒绝理由] 测量窗口不对齐 —— 论文测的是**单个瞬间**，
+      而本项目的 trunk_lean 取的是**阶段均值**。
+
+      数据来源质量很高：2018 世界室内田径锦标赛男子 60m 决赛的
+      8 名世界级选手，150 Hz 高速摄影，发表于 Journal of Biomechanics。
+      数值本身也合理（换算后第一次着地前倾 51°，落在短跑起跑的
+      常识范围内）。**问题不在数据，在于口径不可比。**
+
+      具体不对齐：
+
+        论文  GC1TD / GC1TO = 起跑器蹬出后【第一次】着地/离地那一瞬间
+              即加速的**第 1 步**
+        我们  metric_trunk_lean 的 aggregate[phase]["mean"]
+              = 该阶段【所有帧的均值】，而 acceleration 覆盖约 5–8 步
+
+      加速段躯干是单调抬起的（第 1 步前倾最大），所以：
+
+        第 1 步 51° → 第 8 步约 28°，阶段均值约 36°
+        论文给的区间（51±2×3 = 45–57°）是整段的**峰值区间**
+
+      后果：若照此入库，正常运动员实测均值 36° 会低于下限 45°，
+      **每一个正常运动员都被报「躯干抬起过早」** ——
+      与另外两条拒绝的后果同型：系统性误报，且数字看起来合理。
+
+    follow_up: >-
+      可行的三条路（按推荐顺序）：
+
+      ① 找报告「加速段平均躯干角」或「每个 10m 分段均值」的文献 ——
+         口径自然对齐，改动最小。
+
+      ② 为「第一次着地瞬间」单独定义一个新指标（如
+         trunk_lean_first_step），口径就对齐了。
+         但这要改 docs/03 指标定义、契约与 App 展示，成本较高，
+         且需要确认这个瞬间对教练有独立价值。
+
+      ③ 向原作者索取逐帧原始数据，自己统计出阶段均值。
+
+      在此之前 trunk_lean 的两个阶段都保持留空 ——
+      报告只输出测量值，不做偏差判断。
+
+  # -------------------------------------------------------------------------
+  # 第四类：**找对了论文，但关键数据在图上读不到**
+  #
+  # 与前三类都不同 —— 论文本身是理想来源，只是数据获取受限。
+  # 记下来是为了 ① 不重复检索同一篇 ② 将来有条件时优先处理
+  # -------------------------------------------------------------------------
+  - metric_id: trunk_lean
+    source_locator: >-
+      Nagahara R, Matsubayashi T, Matsuo A, Zushi K (2014).
+      Kinematics of transition during human accelerated sprinting.
+      Biology Open 3(8):689-699. doi:10.1242/bio.20148284
+      PMC4133722（开放获取，CC BY）
+    extracted_values: >-
+      正文只报告了峰值：upper-trunk angle 在第 16 步达到最大 75.7°；
+      lower-trunk angle 最大 84.7°。
+      逐步骤数据在 Fig 5（CG relative and kinematic variables）里，
+      正文没有数值表。
+    reason: >-
+      [拒绝理由] 数据获取受限 —— 关键数值只存在于图里。
+
+      这篇论文**正是我们需要的类型**：
+        · 12 名男性短跑运动员，60 台红外相机
+        · **逐步骤（step-to-step）运动学**，覆盖 0–50 m
+        · 把加速段按两个 breakpoint 分成 initial / middle / final 三段
+        · 口径说明清楚：「the mean upper-trunk angle **during the
+          support phase**」—— 支撑期均值，不是单个瞬间
+
+      但正文只给了峰值（第 16 步 75.7°）。我们需要的
+      **第 1–8 步逐步骤数值只在 Fig 5 的图里**。
+
+      尝试过的获取途径（均失败）：
+        · europepmc.org 的 PDF 与图片 —— 403（Cloudflare 拦截）
+        · journals.biologists.com —— 403
+        · ncbi.nlm.nih.gov 图片路径 —— 404
+        · europepmc fulltextRepo API —— 500
+
+      另一处要注意：论文报的是 **upper-trunk**（上躯干）。
+      完整躯干还含 lower-trunk 与骨盆，而加速段的身体前倾
+      很大程度来自髋部位置而非脊柱。所以即便拿到数值，
+      也要先确认它与本项目 trunk_lean（肩中心→骨盆中心）是否等价 ——
+      否则又是一次「口径不可比」。
+
+    follow_up: >-
+      按推荐顺序：
+
+      ① **在能正常访问的网络上打开 PMC4133722 的 Fig 5**，
+         读 upper-trunk angle 曲线（第 1–16 步）。成本最低 ——
+         论文本身是开放获取的，只是本机网络被 Cloudflare 拦了。
+
+      ② 查 Europe PMC 的补充材料 / 数据可用性声明，看有无原始数据。
+
+      ③ 邮件联系作者索取逐步骤数据（CC BY 论文，作者通常愿意提供）。
+
+      ④ 换一篇报告加速段躯干角**分段均值**的文献。
+
+      ⚠️ 在此之前不要用 75.7° 入库 ——
+         它是第 16 步（已接近最高速度）的峰值，
+         不是加速段的代表值。
+
+
+  - metric_id: step_frequency
+    source_locator: "IAAF 2017 报告 Table 16（Step rate 行）"
+    extracted_values: "3.97, 4.24, 4.55 Hz（3 名奖牌得主）"
+    reason: >-
+      数据本身可用，但样本只有 3 人，
+      而 step_frequency 已经有了一份 n=8 的标准值
+      （见 sprint_100m.yaml，来自 Štuhec 2023 的 7 名决赛选手）。
+      同一指标同一相位重复入库会引入"该用哪一条"的歧义。
+      保留样本量更大的那一条。
+    follow_up: >-
+      若将来需要更细的分水平数据，可以把这一条补进来作为
+      奖牌得主子群的参考值。（换算：4.24 Hz = 254.4 步/分，
+      3.97 Hz = 238.2，4.55 Hz = 273.0）

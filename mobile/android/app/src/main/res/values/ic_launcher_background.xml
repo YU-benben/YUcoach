@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 自适应图标背景层。
+     用纯色而非原图：系统会把背景层裁成各种形状（圆形/方形/水滴），
+     原图在裁切后边缘会露出接缝，纯色则任何形状都干净。
+     颜色取自原图背景采样值 #9DDAFE。
+     由 scripts/gen_icons.py 生成，请勿手工修改。 -->
+<resources>
+    <color name="ic_launcher_background">#9DDAFE</color>
+</resources>

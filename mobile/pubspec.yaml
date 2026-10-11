@@ -1,0 +1,129 @@
+name: yu_coach
+description: "YUcoach 短跑跑姿分析 —— 教练上传训练视频，系统输出关键帧图解与训练指导。"
+# The following line prevents the package from being accidentally published to
+# pub.dev using `flutter pub publish`. This is preferred for private packages.
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+
+# The following defines the version and build number for your application.
+# A version number is three numbers separated by dots, like 1.2.43
+# followed by an optional build number separated by a +.
+# Both the version and the builder number may be overridden in flutter
+# build by specifying --build-name and --build-number, respectively.
+# In Android, build-name is used as versionName while build-number used as versionCode.
+# Read more about Android versioning at https://developer.android.com/studio/publish/versioning
+# In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
+# Read more about iOS versioning at
+# https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
+# In Windows, build-name is used as the major, minor, and patch parts
+# of the product and file versions while build-number is used as the build suffix.
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.5
+
+# Dependencies specify other packages that your package needs in order to work.
+# To automatically upgrade your package dependencies to the latest versions
+# consider running `flutter pub upgrade --major-versions`. Alternatively,
+# dependencies can be manually updated by changing the version numbers below to
+# the latest version available on pub.dev. To see which dependencies have newer
+# versions available, run `flutter pub outdated`.
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # 本地持久化：保存账号、运动员档案、采集记录与分析结果。
+  #
+  # 为什么先用 JSON 文件而不是 SQLite：
+  #   现阶段是单教练、几十条记录的量级，JSON 完全够用，且不需要
+  #   build_runner 代码生成与原生库编译，构建链路最短。
+  #   数据量上来后换 drift，只改 Repository 实现，界面不动。
+  path_provider: ^2.1.5
+
+  # 密码哈希。绝不能明文存密码。
+  crypto: ^3.0.6
+
+  # 选择视频文件（Android 走 SAF，无需存储权限）
+  #
+  # 为什么是 13.x 而不是 8.x：
+  #   8.x 的 Android 侧硬编码了 compileSdk 34，而 Flutter 3.47 的
+  #   flutter_plugin_android_lifecycle 要求依赖方编译在 API 36 以上，
+  #   AGP 的 AAR 元数据校验是**硬失败**（不是警告），构建会中断。
+  #   13.x 已跟上较新的 compileSdk。
+  file_picker: ^13.1.0
+
+  # 与本地分析服务通信（上传视频、查询任务、取报告）。
+  #
+  # 用 StreamedRequest 分片上传而不是一次性把视频读进内存：
+  #   慢动作素材常有几百 MB，整块读进内存会在手机上触发 OOM。
+  #   http 包支持流式请求体，配合文件流可以做到内存占用与文件大小无关。
+  http: ^1.2.2
+  onnxruntime:
+    path: third_party/onnxruntime
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+
+# For information on the generic Dart part of this file, see the
+# following page: https://dart.dev/tools/pub/pubspec
+
+# The following section is specific to Flutter packages.
+flutter:
+
+  # The following line ensures that the Material Icons font is
+  # included with your application, so that you can use the icons in
+  # the material Icons class.
+  uses-material-design: true
+
+  # 开发用假数据。
+  #
+  # 注意：Flutter 的 asset 必须是**包内路径**，不支持 ../ 引用包外文件 ——
+  # 写了也不会报错，只是静默不打包，运行时才报 "Unable to load asset"。
+  #
+  # 单一事实来源在仓库根的 samples/fixtures/（由 scripts/check_contracts.py
+  # 校验），本目录是它的同步副本。同步由门禁自动完成：
+  #     python scripts/check_all.py
+  assets:
+    - assets/fixtures/
+    # App 内使用的品牌形象（登录页、关于页）。
+    # 图标（桌面图标/启动图标）不走这里 —— 那些由平台资源提供，
+    # 见 scripts/gen_icons.py。
+    - assets/branding/
+    # 姿态模型（ONNX）。
+    #
+    # ⚠️ 打包进 APK 而不是运行时下载，是刻意的：
+    #    「随时随地能用」是核心目标，而下载就需要网络 ——
+    #    训练场信号常常很差。
+    #
+    # 代价：换模型必须重新编译 APK，不能像电脑端那样直接换文件。
+    # 这个取舍记在 data/models/model_manifest.json 里。
+    - assets/models/
+
+  # An image asset can refer to one or more resolution-specific "variants", see
+  # https://flutter.dev/to/resolution-aware-images
+
+  # For details regarding adding assets from package dependencies, see
+  # https://flutter.dev/to/asset-from-package
+
+  # To add custom fonts to your application, add a fonts section here,
+  # in this "flutter" section. Each entry in this list should have a
+  # "family" key with the font family name, and a "fonts" key with a
+  # list giving the asset and other descriptors for the font. For
+  # example:
+  # fonts:
+  #   - family: Schyler
+  #     fonts:
+  #       - asset: fonts/Schyler-Regular.ttf
+  #       - asset: fonts/Schyler-Italic.ttf
+  #         style: italic
+  #   - family: Trajan Pro
+  #     fonts:
+  #       - asset: fonts/TrajanPro.ttf
+  #       - asset: fonts/TrajanPro_Bold.ttf
+  #         weight: 700
+  #
+  # For details regarding fonts from package dependencies,
+  # see https://flutter.dev/to/font-from-package

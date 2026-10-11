@@ -1,0 +1,30 @@
+{
+  "imgsz": 640,
+  "keypoint_count": 17,
+  "coco_names": [
+    "nose",
+    "eye_l",
+    "eye_r",
+    "ear_l",
+    "ear_r",
+    "shoulder_l",
+    "shoulder_r",
+    "elbow_l",
+    "elbow_r",
+    "wrist_l",
+    "wrist_r",
+    "hip_l",
+    "hip_r",
+    "knee_l",
+    "knee_r",
+    "ankle_l",
+    "ankle_r"
+  ],
+  "frames": [
+    49,
+    116,
+    182,
+    249
+  ],
+  "note": "由 scripts/gen_pose_fixtures.py 生成。Dart 端读这些文件做跨语言对拍。"
+}

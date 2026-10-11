@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://yucoach.local/contracts/finding.schema.json",
+  "title": "Finding",
+  "description": "结论。规则引擎的输出，是'判断'而非'事实'。定义来源：docs/07-数据契约.md §7",
+  "type": "object",
+  "required": ["finding_id", "severity", "view", "phase", "title",
+               "metric_ids", "evidence", "explanation", "drills"],
+  "additionalProperties": false,
+  "properties": {
+
+    "finding_id": { "type": "string", "examples": ["f_0001"] },
+
+    "rule_id": {
+      "type": ["string", "null"],
+      "description": "结论的责任人。教练质疑时据此追溯到规则。数据不足型结论为 null",
+      "examples": ["R_SIDE_ACC_TRUNK_TOO_UPRIGHT"]
+    },
+
+    "rule_version": { "type": ["string", "null"] },
+
+    "severity": { "$ref": "common.schema.json#/$defs/Severity" },
+
+    "view": { "$ref": "common.schema.json#/$defs/View" },
+
+    "phase": { "$ref": "common.schema.json#/$defs/Phase" },
+
+    "title": {
+      "type": "string",
+      "maxLength": 20,
+      "description": "一句话结论。不得评价人，只描述动作现象"
+    },
+
+    "metric_ids": {
+      "type": "array",
+      "description": "关联指标 ID，供界面联动高亮。无关联时返回空数组，不返回 null",
+      "items": { "type": "string" }
+    },
+
+    "evidence": {
+      "type": "array",
+      "description": "具体证据：实测值、标准区间、偏离量、帧号。数据不足型结论返回空数组，不返回 null",
+      "items": { "$ref": "#/$defs/Evidence" }
+    },
+
+    "explanation": {
+      "type": "string",
+      "description": "必须写机制，不得重复 title。判断标准：必须有一句能回答'这为什么是问题'"
+    },
+
+    "confidence": {
+      "oneOf": [
+        { "$ref": "common.schema.json#/$defs/Confidence" },
+        { "type": "null" }
+      ],
+      "description": "结论置信度。若依据的指标 reliable=false，此值必须 <= 0.5"
+    },
+
+    "basis": {
+      "oneOf": [
+        { "$ref": "common.schema.json#/$defs/FindingBasis" },
+        { "type": "null" }
+      ]
+    },
+
+    "caveat": {
+      "type": ["string", "null"],
+      "description": "低置信度时给用户的明确提示。basis=normal 时为 null，否则必填"
+    },
+
+    "drills": {
+      "type": "array",
+      "description": "训练处方。不超过 3 个，超过则教练无从选择",
+      "maxItems": 3,
+      "items": { "$ref": "#/$defs/Drill" }
+    },
+
+    "reason": {
+      "oneOf": [
+        { "$ref": "common.schema.json#/$defs/InsufficientReason" },
+        { "type": "null" }
+      ],
+      "description": "数据不足型结论（severity=insufficient_data）才有"
+    },
+
+    "required": {
+      "type": ["string", "null"],
+      "description": "数据不足型结论：该判断需要什么条件"
+    },
+
+    "actual": {
+      "type": ["string", "null"],
+      "description": "数据不足型结论：本次实际的条件"
+    },
+
+    "impact": {
+      "type": ["array", "null"],
+      "description": "数据不足型结论：受影响的指标 ID",
+      "items": { "type": "string" }
+    },
+
+    "suggestion": {
+      "type": ["string", "null"],
+      "description": "数据不足型结论：给用户的可操作建议。必填，不得为空"
+    }
+  },
+
+  "$defs": {
+
+    "Evidence": {
+      "type": "object",
+      "required": ["metric_id"],
+      "additionalProperties": false,
+      "properties": {
+        "metric_id": { "type": "string" },
+        "value": { "type": ["number", "string", "null"] },
+        "ref_low": { "type": ["number", "null"] },
+        "ref_high": { "type": ["number", "null"] },
+        "deviation_text": {
+          "type": ["string", "null"],
+          "description": "人类可读的偏离描述，如'低于下限 6.8°'",
+          "examples": ["低于下限 6.8°"]
+        },
+        "phase": {
+          "oneOf": [
+            { "$ref": "common.schema.json#/$defs/Phase" },
+            { "type": "null" }
+          ]
+        },
+        "frame_index": { "type": ["integer", "null"] }
+      }
+    },
+
+    "Drill": {
+      "type": "object",
+      "required": ["drill_id", "name", "cue"],
+      "additionalProperties": false,
+      "properties": {
+        "drill_id": { "type": "string", "examples": ["D_007"] },
+        "name": { "type": "string" },
+        "sets": { "type": ["string", "null"] },
+        "reps": { "type": ["string", "null"] },
+        "duration": { "type": ["string", "null"] },
+        "cue": {
+          "type": "string",
+          "description": "教练现场喊给运动员的口令。一句话、可执行、无术语、单一焦点。处方块中最重要的一行"
+        },
+        "mechanism": {
+          "type": ["string", "null"],
+          "description": "为什么这个练习能解决该问题"
+        },
+        "video_url": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

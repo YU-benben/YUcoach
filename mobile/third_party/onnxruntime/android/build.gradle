@@ -1,0 +1,83 @@
+// Android 构建配置（本项目内的本地副本）
+//
+// ===========================================================================
+// 为什么这个包被放进项目里，而不是用 pub 依赖
+// ===========================================================================
+//
+// pub 上的 `onnxruntime` 1.4.1 最后发布于两年前，它的构建配置是：
+//
+//     AGP 7.3.0 / compileSdkVersion 33 / Java 1.8
+//
+// 而当前的 AndroidX 依赖链（fragment 1.7.1、window 1.2.0、activity 1.8.1 …）
+// 要求依赖方编译在 **34 以上**。AGP 的 AAR 元数据校验对此是**硬失败**：
+//
+//     Dependency 'androidx.fragment:fragment:1.7.1' requires ...
+//     compile against version 34 or later
+//     :onnxruntime is currently compiled against android-33.
+//
+// 试过的办法与结果：
+//
+//   ✗ `android.suppressUnsupportedCompileSdk=33`
+//       只对**应用**模块生效，对库模块无效。
+//   ✗ 在根 build.gradle.kts 里用 afterEvaluate 改子项目的 compileSdk
+//       改不动 —— AGP 在 evaluation 阶段就把值锁定了。
+//   ✓ **把包放进项目、直接改这一个数字**（就是本文件）
+//
+// 代价是我们要维护这一份副本。但代价很小：
+//   · 整个包只有 11 个 Dart 文件 + 1 个 .so，且已两年未更新
+//   · 改动只有 compileSdk / AGP 版本 / Java 版本三处
+//
+// ===========================================================================
+// 与本项目相关的两处改动
+// ===========================================================================
+//
+//   1. compileSdkVersion 33 → 36（解决上面的校验失败）
+//   2. AGP 7.3.0 → 不用 buildscript 里的旧版本，跟随根项目
+//
+// 另外：**只保留 arm64-v8a 的原生库**。
+//   pub 上那份同时带 armv7（9.37 MB），而本项目已决定只支持 arm64
+//   （见 android/app/build.gradle.kts 的 abiFilters 与那里的说明）。
+//   留着 armv7 只会让仓库和 APK 白胖 9 MB。
+
+group 'com.gtbluesky.onnxruntime'
+version '1.0'
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'com.gtbluesky.onnxruntime'
+
+    // ⚠️ 这里是本项目唯一的实质性改动。
+    //    提到 36 之后，AGP 的 AAR 元数据校验就通过了。
+    compileSdkVersion 36
+
+    // 用根项目声明的 NDK 版本。
+    // 本项目没有 C/C++ 代码，NDK 只是 Flutter 模板的默认要求。
+    ndkVersion android.ndkVersion
+
+    compileOptions {
+        // Java 8 → 17，跟随根项目。
+        // 混用不同 Java 目标版本在合并 manifest 时会有告警。
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        // API 21 —— 比本项目的 minSdk（24）更低，不构成限制。
+        minSdkVersion 21
+    }
+}

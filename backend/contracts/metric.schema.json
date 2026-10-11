@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://yucoach.local/contracts/metric.schema.json",
+  "title": "Metric",
+  "description": "指标。定义来源：docs/07-数据契约.md §6",
+  "type": "object",
+  "required": [
+    "metric_id", "name_zh", "unit", "view", "phase",
+    "reliable", "reliability"
+  ],
+  "additionalProperties": false,
+  "properties": {
+
+    "metric_id": {
+      "type": "string",
+      "description": "全局唯一 ID。清单见 docs/03-指标定义.md 附录 A",
+      "examples": ["trunk_lean", "ground_contact_time", "shank_angle_touchdown"]
+    },
+
+    "name_zh": { "type": "string" },
+
+    "unit": {
+      "type": "string",
+      "enum": ["deg", "ms", "m", "m/s", "steps/min", "ratio", "enum"],
+      "description": "ratio 表示无量纲比值"
+    },
+
+    "view": {
+      "allOf": [{ "$ref": "common.schema.json#/$defs/View" }],
+      "description": "该指标所属视角。与请求视角不匹配时返回 insufficient_data"
+    },
+
+    "phase": { "$ref": "common.schema.json#/$defs/Phase" },
+
+    "event": {
+      "oneOf": [
+        { "$ref": "common.schema.json#/$defs/Event" },
+        { "type": "null" }
+      ],
+      "description": "事件帧指标才有；逐帧指标为 null"
+    },
+
+    "side": {
+      "oneOf": [
+        { "$ref": "common.schema.json#/$defs/Side" },
+        { "type": "null" }
+      ],
+      "description": "分侧指标才有"
+    },
+
+    "frame_index": { "type": ["integer", "null"] },
+
+    "time_ms": { "type": ["number", "null"] },
+
+    "value": {
+      "type": ["number", "string", "null"],
+      "description": "单帧/单次值。insufficient_data 时为 null。枚举类指标为字符串"
+    },
+
+    "aggregate": {
+      "oneOf": [
+        { "$ref": "common.schema.json#/$defs/Aggregate" },
+        { "type": "null" }
+      ],
+      "description": "同阶段多步次的统计量"
+    },
+
+    "valid_frame_count": {
+      "type": ["integer", "null"],
+      "description": "参与计算的有效帧数（已排除窗外帧与 ambiguous 帧）"
+    },
+
+    "total_frame_count": { "type": ["integer", "null"] },
+
+    "ref": {
+      "oneOf": [
+        { "$ref": "common.schema.json#/$defs/ReferenceRange" },
+        { "type": "null" }
+      ],
+      "description": "标准值区间。为 null 表示无标准值，此时不做偏离判断"
+    },
+
+    "deviation": {
+      "type": ["number", "null"],
+      "description": "标准化偏离。下列任一情况必须为 null：(1) ref.sd 缺失 (2) ref.applicable_phase 与 phase 不符 (3) ref.view 与 view 不匹配"
+    },
+
+    "confidence": {
+      "oneOf": [
+        { "$ref": "common.schema.json#/$defs/Confidence" },
+        { "type": "null" }
+      ],
+      "description": "这个数准不准。与 reliable 是两个不同问题"
+    },
+
+    "reliability": { "$ref": "common.schema.json#/$defs/Reliability" },
+
+    "reliable": {
+      "type": "boolean",
+      "description": "这个数该不该用。false 时界面必须显示但标注警示，不得隐藏"
+    },
+
+    "reliability_note": {
+      "type": ["string", "null"],
+      "description": "reliable=false 时必须给出原因，不得为 null"
+    },
+
+    "perspective_error_estimate": {
+      "type": ["number", "null"],
+      "description": "该指标受镜头跟踪影响的角度误差量级（度）。>3 时报告结论措辞必须降级"
+    },
+
+    "insufficient": {
+      "oneOf": [
+        { "$ref": "common.schema.json#/$defs/InsufficientInfo" },
+        { "type": "null" }
+      ],
+      "description": "数据不足的说明。数据不足时必须输出，不得静默省略该指标"
+    }
+  }
+}

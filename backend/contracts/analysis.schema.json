@@ -1,0 +1,231 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://yucoach.local/contracts/analysis.schema.json",
+  "title": "AnalysisResult",
+  "description": "聚合分析结果。报告页一次拉取全部内容。定义来源：docs/07-数据契约.md §8",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "analysis_id",
+    "session",
+    "versions",
+    "quality_score",
+    "metrics",
+    "findings",
+    "summary",
+    "phases_detected",
+    "keyframes"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "契约版本，语义化版本格式",
+      "examples": [
+        "1.1.0"
+      ]
+    },
+    "analysis_id": {
+      "type": "string",
+      "examples": [
+        "a_s_20260301_at00007_01_v2"
+      ]
+    },
+    "session": {
+      "$ref": "session.schema.json"
+    },
+    "versions": {
+      "$ref": "common.schema.json#/$defs/Versions"
+    },
+    "quality_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "perspective_error_estimate": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "description": "整份报告的透视误差量级（度），取各指标的最大值"
+    },
+    "phases_detected": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PhaseDetection"
+      }
+    },
+    "metrics": {
+      "type": "array",
+      "description": "全部指标，含数据不足的。数据不足的指标 value 为 null 且 insufficient 非 null。无数据时返回空数组，不返回 null",
+      "items": {
+        "$ref": "metric.schema.json"
+      }
+    },
+    "findings": {
+      "type": "array",
+      "description": "全部结论，含数据不足型。报告主体只展示 severity 为 major/minor 的前 3 条。无结论时返回空数组，不返回 null",
+      "items": {
+        "$ref": "finding.schema.json"
+      }
+    },
+    "summary": {
+      "$ref": "#/$defs/Summary"
+    },
+    "keyframes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Keyframe"
+      }
+    }
+  },
+  "$defs": {
+    "PhaseDetection": {
+      "type": "object",
+      "required": [
+        "phase",
+        "frame_start",
+        "frame_end"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "phase": {
+          "$ref": "common.schema.json#/$defs/Phase"
+        },
+        "frame_start": {
+          "type": "integer"
+        },
+        "frame_end": {
+          "type": "integer"
+        },
+        "confidence": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1,
+          "description": "阶段切分置信度。低于阈值时该阶段所有结论降级为 insufficient_data"
+        }
+      }
+    },
+    "Summary": {
+      "type": "object",
+      "description": "总览。headline 由服务端确定性生成，不由 LLM 自由撰写",
+      "required": [
+        "headline",
+        "major_count",
+        "minor_count",
+        "insufficient_count"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "headline": {
+          "type": "string",
+          "maxLength": 60,
+          "description": "一句话总结，不超过 60 字"
+        },
+        "major_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "minor_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "insufficient_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "Keyframe": {
+      "type": "object",
+      "required": [
+        "frame_index",
+        "event",
+        "phase",
+        "image_url",
+        "annotations"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "frame_index": {
+          "type": "integer"
+        },
+        "event": {
+          "$ref": "common.schema.json#/$defs/Event"
+        },
+        "side": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/Side"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "step_index": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "phase": {
+          "$ref": "common.schema.json#/$defs/Phase"
+        },
+        "image_url": {
+          "type": "string"
+        },
+        "pixels_per_meter": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "该帧的参考尺度。报告必须在关键帧图上绘制尺度条，否则教练会误判体型变化"
+        },
+        "annotations": {
+          "type": "array",
+          "description": "该帧上要标注的角度值",
+          "items": {
+            "$ref": "#/$defs/KeyframeAnnotation"
+          }
+        }
+      }
+    },
+    "KeyframeAnnotation": {
+      "type": "object",
+      "required": [
+        "metric_id",
+        "value",
+        "unit"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "metric_id": {
+          "type": "string"
+        },
+        "value": {
+          "type": "number"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "ref_low": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "ref_high": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

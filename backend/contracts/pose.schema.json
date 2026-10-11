@@ -1,0 +1,252 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://yucoach.local/contracts/pose.schema.json",
+  "title": "Pose",
+  "description": "姿态数据。逐帧人体关键点。定义来源：docs/07-数据契约.md §5",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "session_id",
+    "analysis_id",
+    "source",
+    "time_base",
+    "view",
+    "frames"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "契约版本，语义化版本格式",
+      "examples": [
+        "1.1.0"
+      ]
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "analysis_id": {
+      "type": "string"
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "video_width",
+        "video_height",
+        "frame_count",
+        "fps_verified",
+        "fps_verify",
+        "camera_motion",
+        "reference_scale"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "video_width": {
+          "type": "integer"
+        },
+        "video_height": {
+          "type": "integer"
+        },
+        "frame_count": {
+          "type": "integer"
+        },
+        "fps_declared": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "fps_verified": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "fps_verify": {
+          "$ref": "common.schema.json#/$defs/FpsVerify"
+        },
+        "distortion_corrected": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "camera_motion": {
+          "$ref": "common.schema.json#/$defs/CameraMotion"
+        },
+        "reference_scale": {
+          "$ref": "common.schema.json#/$defs/ReferenceScale"
+        }
+      }
+    },
+    "time_base": {
+      "$ref": "common.schema.json#/$defs/TimeBase"
+    },
+    "view": {
+      "type": "object",
+      "required": [
+        "declared",
+        "keypoint_format",
+        "keypoint_names",
+        "coord_system",
+        "detected"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "declared": {
+          "$ref": "common.schema.json#/$defs/View"
+        },
+        "detected": {
+          "$ref": "common.schema.json#/$defs/View"
+        },
+        "agreement": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "direction": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "left_to_right",
+            "right_to_left",
+            null
+          ],
+          "description": "跑动方向。影响角度正负号约定"
+        },
+        "coord_system": {
+          "type": "string",
+          "enum": [
+            "normalized_top_left"
+          ],
+          "description": "坐标系约定：归一化、原点左上、y 轴向下"
+        },
+        "keypoint_format": {
+          "type": "string",
+          "examples": [
+            "yu16"
+          ]
+        },
+        "keypoint_names": {
+          "$ref": "common.schema.json#/$defs/KeypointNames"
+        }
+      }
+    },
+    "window": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "本次返回的帧窗口。客户端应据此判断是否为全量",
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "type": "integer"
+        },
+        "to": {
+          "type": "integer"
+        },
+        "returned": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "from",
+        "to",
+        "returned"
+      ]
+    },
+    "frames": {
+      "type": "array",
+      "description": "逐帧数据。单次请求最多返回 600 帧",
+      "items": {
+        "$ref": "#/$defs/PoseFrame"
+      }
+    }
+  },
+  "$defs": {
+    "PoseFrame": {
+      "type": "object",
+      "required": [
+        "frame_index",
+        "keypoints",
+        "is_occluded",
+        "is_interpolated"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "frame_index": {
+          "type": "integer",
+          "description": "视频中的绝对帧号"
+        },
+        "time_ms": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "相对 time_base.origin_frame_index 的毫秒数"
+        },
+        "person_conf": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "bbox": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/BBox"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "keypoints": {
+          "type": "array",
+          "description": "定长数组，长度必须等于 view.keypoint_names 的长度。不可见点用 q=0 占位，不得缺项",
+          "minItems": 16,
+          "maxItems": 16,
+          "items": {
+            "$ref": "common.schema.json#/$defs/Keypoint"
+          }
+        },
+        "is_occluded": {
+          "type": "boolean"
+        },
+        "is_interpolated": {
+          "type": "boolean",
+          "description": "该帧为插值补出，非实测。客户端必须画成虚线，不可与实测混淆"
+        },
+        "measurement_window": {
+          "allOf": [
+            {
+              "$ref": "common.schema.json#/$defs/MeasurementWindow"
+            }
+          ],
+          "description": "有效测量窗标记。excluded 的帧不参与任何指标计算"
+        },
+        "skew_deg": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "该帧的视线偏斜角估计。越大表示运动员偏离画面中心越远"
+        },
+        "pixels_per_meter": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "该帧的参考尺度。跟踪拍摄下逐帧不同，位移换算必须用此值而非全局值"
+        }
+      }
+    }
+  }
+}

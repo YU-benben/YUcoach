@@ -1,0 +1,330 @@
+# 参考标准值库
+#
+# ⚠️ 铁律（见 docs/04-参考标准值规范.md §1）
+#
+#     任何写入本文件的数字，必须能指向一份可查证的原始文献，
+#     且记录页码或图表号。查不到就留空。
+#
+#     留空意味着该指标只输出测量值，不做偏离判断。
+#
+#     这是全项目唯一无法通过测试发现的错误类型 ——
+#     指标算错可以对比真值，契约写错有 Schema 校验，规则写错有用例验证，
+#     而**标准值编造没有任何自动检测手段**。
+#     所以本文件由 scripts/check_standards.py 机械校验：
+#     source.locator 为空、metric_id 不存在、view/phase 不匹配的条目
+#     一律拒绝加载，并在门禁里报错。
+#
+# 字段定义见 docs/04-参考标准值规范.md §4
+
+version: "2026Q1"
+
+entries: []
+
+# ---------------------------------------------------------------------------
+# 已核实的条目
+#
+# 下面这些是**实际检索并读过原文**的。每一条都记了出处与提取口径。
+# ---------------------------------------------------------------------------
+
+verified:
+
+  # ---- 步频（全程均值，100m）----
+  #
+  # 提取口径说明：
+  #   原文报告的"Step frequency"是**整个 100m 的平均值**
+  #   （由总步数 ÷ 比赛时间得到），不是途中跑的瞬时值。
+  #   所以这条标准值只能配 phase: whole_run 使用 ——
+  #   拿它去判途中跑的步频会系统性偏低。
+  - metric_id: step_frequency
+    view: side
+    phase: whole_run
+    # 这条数值覆盖的测量窗口（见 backend/standards/loader.py）
+    window: whole_run
+    population:
+      gender: male
+      level: elite
+      event: "100m"
+      age_range: "22-29"
+    n: 8            # 原文比较的是 1 名世界纪录选手与另外 7 名决赛选手
+    low: 259.4      # 4.324 Hz × 60
+    high: 283.8     # 4.730 Hz × 60
+    mean: 271.8     # 4.530 Hz × 60
+    sd: 12.0        # 原文以 Hz 报告 sd=0.20，换算为 12.0 步/分
+    source:
+      authors: "Štuhec S, Planjšek P, Čoh M, Mackala K"
+      year: 2023
+      title: >-
+        Multicomponent Velocity Measurement for Linear Sprinting:
+        Usain Bolt's 100 m World-Record Analysis
+      journal: "Bioengineering (Basel), 10(11):1254"
+      doi: "10.3390/bioengineering10111254"
+      locator: "Table 1（Step frequency 行，Rest of Finalists 列）"
+    measurement_note: >-
+      原文的 step frequency 由「总步数 ÷ 比赛时间」得到，是全程平均步频。
+      测量手段为激光测距（LAVEG Sport / LDM 300，100 Hz），
+      非视频分析 —— 与本项目的测量口径不同，属于跨方法比较。
+      因此该条目的可靠性低于同方法的文献值。
+    extraction_note: >-
+      原文 Table 1 中 "Rest of Finalists"（柏林世锦赛 2009 决赛其余 7 人）
+      的 Step frequency 为 mean=4.53 Hz、SD=0.20 Hz。
+      区间由 mean±SD 推算（非原文直接报告），已按规范标注为推算。
+      换算：Hz × 60 = 步/分。
+    verified_by: "开发阶段自查"
+    verified_date: "2026-10-05"
+    std_version: "2026Q1"
+
+    caveats:
+      - >-
+        原文把 1 名世界纪录选手与 7 名决赛选手分开报告。
+        本条用的是 7 名决赛选手的统计量，不是全体。
+      - >-
+        7 人的样本量很小，区间的代表性有限。
+        这不是"精英群体的常见范围"，只能当作数量级参考。
+      - >-
+        激光测距得到的是质心位移推算的步频，
+        与视频关键点推算的步频可能存在系统性差异。
+
+    # 报告里给教练看的出处。中文、简短、可追溯。
+    # 完整的外文出处保留在 source 里，供开发排查使用。
+    citation_zh: "《Bioengineering》2023 年，柏林世锦赛 100m 决赛选手数据（Table 1）"
+
+
+# ---------------------------------------------------------------------------
+# 待补条目
+#
+# ⚠️ 下面这些**刻意留空**。它们记录了"需要什么数据、该去哪里找"，
+#    但在找到可查证的出处之前不得填入任何数字。
+#
+#    留空不是遗漏 —— 它是本项目最重要的安全机制。
+# ---------------------------------------------------------------------------
+
+pending:
+
+  - metric_id: trunk_lean
+    phase: acceleration
+    needed: "加速段躯干前倾角的区间（度）"
+    why_vacant: >-
+      ⚠️ 两条待核实的事，都写在这里避免重复检索。
+
+      ① 本项目文档里写"加速段 45–60° 是优秀"，
+         但我没有找到可以指向具体页码的原始出处。
+         凭文档里的二手转述入库违反铁律，所以留空。
+
+      ② IAAF 2017 报告的躯干角数据已检索并主动拒绝，
+         原因见 iaaf_2017_100m.yaml 的 rejected 段
+         （提取值换算出 61–68° 前倾，与短跑姿态矛盾，
+          口径未核实）。
+
+      结论：**该指标的文献检索尚未成功**，不是"还没做"。
+    search_hint: >-
+      检索 "sprint acceleration trunk angle forward lean degrees"，
+      关注报告了 mean±SD 或区间的研究。
+      务必核对参考轴：「相对竖直」与「相对水平」互补
+      （相加约 90°），混用会把结论完全颠倒 ——
+      这正是 IAAF 那批数据被拒绝的原因。
+    view: side
+
+  - metric_id: trunk_lean
+    phase: max_velocity
+    needed: "途中跑躯干前倾角的区间（度）"
+    why_vacant: >-
+      ⚠️ 检索过但**主动拒绝**了一份数据，详见
+      iaaf_2017_100m.yaml 的 rejected 段。
+
+      情况：IAAF 2017 伦敦世锦赛报告 Table 10 有躯干角行，
+      提取换算出 61–68° 的前倾角。但短跑途中跑应接近直立，
+      61–68° 意味着躯干几乎水平，与常识严重矛盾。
+      报告自身也承认该角度不含脊柱弯曲与躯干旋转，
+      且 Figure 21 的纵轴范围是 45–90°（针对冲线阶段）。
+      口径未核实，按 docs/04 §4.3 不得入库。
+
+      另：本项目文档里写的「途中跑 5–15° 才对」
+      **同样没有找到可指向页码的原始出处**，不能直接采信。
+    search_hint: >-
+      检索时优先找明确写了
+      "trunk angle relative to the vertical" 或
+      "forward lean angle from vertical" 的研究。
+      若原文只说 "trunk angle" 而未说明参考轴，必须回查其方法学章节。
+      注意区分「颈-髋连线」与「肩-髋连线」两种标志点。
+    view: side
+
+  - metric_id: shank_angle_touchdown
+    phase: acceleration
+    needed: "着地瞬间胫骨角（相对竖直）的区间（度）"
+    why_vacant: >-
+      胫骨角与水平制动力直接相关，文献里常以
+      "angle of the shank relative to vertical at touchdown" 表述。
+      未找到可引用的具体数值。
+    search_hint: >-
+      检索 "shank angle touchdown braking sprint"。
+      这个指标与触地时的制动冲量强相关，是短跑技术的关键量。
+    view: side
+
+  - metric_id: knee_valgus_touchdown
+    phase: acceleration
+    needed: "着地时膝外翻角（额状面）的区间（度）"
+    why_vacant: >-
+      额状面文献远比矢状面少。检索到的研究多用
+      "knee abduction angle" 或 "dynamic knee valgus"，
+      且多为落地动作（drop landing）而非短跑，
+      口径不同不能直接套用。
+    search_hint: >-
+      检索 "knee valgus running frontal plane"。
+      若只找到落地动作的数据，应在 measurement_note 里
+      明确说明适用范围的差异，或不予入库。
+    view: front
+
+  - metric_id: pelvis_drop_midstance
+    phase: acceleration
+    needed: "支撑中期骨盆下沉量的区间（度）"
+    why_vacant: >-
+      该指标（Trendelenburg 征象）在临床步态分析里有较多数据，
+      但短跑场景下的正常范围未找到可引用出处。
+    search_hint: >-
+      检索 "pelvic drop running Trendelenburg angle"。
+      注意区分「骨盆下沉」与「骨盆侧倾」的报告口径。
+    view: front
+
+  # ---- 以下为补齐覆盖度时新增的待补条目 ----
+  #
+  # 原则同上：记录"需要什么数据、去哪里找"，
+  # 但在找到可查证出处之前不填任何数字。
+  #
+  # 之所以要把全部 20 个指标都列进来：
+  # "没有标准值"和"不知道需要什么标准值"是两件事。
+  # 前者是有意的留空，后者是遗漏。
+
+  - metric_id: duty_factor
+    phase: max_velocity
+    needed: "占空比（触地时间 ÷ 步态周期）的区间"
+    why_vacant: >-
+      占空比 = 触地时间 / (触地时间 + 腾空时间)。
+      文献报告的多是触地时间与腾空时间本身，
+      占空比需要自己算 —— 但换算会引入误差，不如直接找报告值。
+    search_hint: >-
+      检索 "duty factor sprint running elite"。
+      该指标在比较跑与走的差异时常用，数据可能比预想的多。
+    view: side
+
+  - metric_id: step_length
+    phase: max_velocity
+    needed: "途中跑绝对步长的区间（米）"
+    why_vacant: >-
+      绝对步长与运动员身高强相关，跨人群套用会系统性偏差。
+      本项目更希望用相对步长（见 step_length_relative 条目），
+      但两者都缺可引用出处。
+    search_hint: >-
+      检索 "step length maximum velocity sprint meters"。
+      若找到的数据未同时报告身高，只能作为该人群的参考，
+      需在 measurement_note 里说明适用范围。
+    view: side
+
+  - metric_id: com_height_oscillation
+    phase: max_velocity
+    needed: "重心垂直起伏幅度的区间（米或占身高比例）"
+    why_vacant: >-
+      该指标在跑步经济性研究里常见，但多针对中长跑。
+      短跑（尤其是最高速度阶段）的数据未找到可引用出处。
+    search_hint: >-
+      检索 "center of mass vertical oscillation sprint"。
+      注意区分「骨盆位移」与「真实重心位移」的报告口径 ——
+      两者不等价（腿部摆动会改变重心位置）。
+    view: side
+
+  - metric_id: thigh_swing_range
+    phase: max_velocity
+    needed: "大腿摆动幅度（摆动期内角度极差）的区间（度）"
+    why_vacant: >-
+      该指标的口径差异很大：有的按「大腿相对竖直」，
+      有的按「髋关节角度」，有的按「大腿与躯干夹角」。
+      口径不明时不得入库。
+    search_hint: >-
+      检索 "thigh swing range sprint hip range of motion"。
+      找到数据后必须在 measurement_note 里写清用的是什么口径。
+    view: side
+
+  - metric_id: hip_angle_toeoff
+    phase: acceleration
+    needed: "离地瞬间髋角的区间（度）"
+    why_vacant: >-
+      髋角在文献里常指「躯干与大腿的夹角」，
+      但本项目的定义是 angle(shoulder, hip, knee) ——
+      需要核对口径是否一致才能入库。
+    search_hint: >-
+      检索 "hip angle at toe off sprint"。
+      注意很多研究报告的是「髋关节伸展幅度」而非绝对角度。
+    view: side
+
+  - metric_id: knee_angle_midstance
+    phase: acceleration
+    needed: "支撑中期膝角的区间（度）"
+    why_vacant: >-
+      支撑中期的最小膝角在文献里报告较多，
+      但「支撑中期」的时间定义各家不同（重心最低点 vs 支撑期中点），
+      口径未统一前不入库。
+    search_hint: >-
+      检索 "minimum knee angle stance phase sprint"。
+      需在 measurement_note 里写明支撑中期的判定方式。
+    view: side
+
+  - metric_id: ankle_angle_touchdown
+    phase: acceleration
+    needed: "着地时踝角的区间（度）"
+    why_vacant: >-
+      踝角高度依赖足部关键点的定位精度。
+      本项目的足部点为几何推导，即使有标准值也无法可靠测量，
+      因此优先度低。
+    search_hint: >-
+      检索 "ankle angle at initial contact running"。
+      另注意「踝角」有背屈/跖屈两种表示方向，符号约定必须核对。
+    view: side
+
+  - metric_id: pelvis_tilt
+    phase: acceleration
+    needed: "骨盆侧倾（额状面）的区间（度）"
+    why_vacant: >-
+      额状面文献比矢状面少。
+      骨盆侧倾在单腿支撑期天然存在一定幅度，
+      正常范围需要按支撑期分侧报告，未找到这样的数据。
+    search_hint: >-
+      检索 "pelvic tilt running frontal plane degrees"。
+      注意区分「骨盆侧倾」与「骨盆下沉」—— 后者是前者的变化量。
+    view: front
+
+  - metric_id: pelvis_rotation
+    phase: acceleration
+    needed: "骨盆旋转幅度的区间（度）"
+    why_vacant: >-
+      骨盆旋转通常用三维动作捕捉测量，与单目视频的
+      投影估算法口径完全不同，数据不能直接套用。
+      本项目的该方法学可靠性为 C 级，即使有标准值也只能做趋势对比。
+    search_hint: >-
+      检索 "pelvic rotation running transverse plane"。
+      若只找到三维动作捕捉数据，需在 measurement_note 里
+      明确说明口径差异，或不予入库。
+    view: front
+
+  - metric_id: trunk_lateral_lean
+    phase: acceleration
+    needed: "躯干侧倾（额状面）的区间（度）"
+    why_vacant: >-
+      未找到短跑场景下躯干侧倾的可引用数据。
+      该指标更多出现在损伤风险研究里，而非技术评价。
+    search_hint: >-
+      检索 "trunk lateral lean running frontal plane"。
+      注意「向支撑侧倾」与「向摆动侧倾」的符号约定。
+    view: front
+
+  - metric_id: stance_width_relative
+    phase: acceleration
+    needed: "相对支撑宽度（着地时踝间距 ÷ 骨盆宽）的区间"
+    why_vacant: >-
+      该指标是本项目用骨盆宽归一化定义的，
+      文献里报告的通常是「步宽（step width）」的绝对值（厘米）。
+      两者口径不同 —— 换算需要原文同时给出骨盆宽统计量，
+      检索到的研究未同时报告。
+    search_hint: >-
+      检索 "step width running cm" 找绝对值，
+      或 "relative step width pelvis" 找归一化值。
+      注意步宽与支撑宽度在部分文献里是同义词，需核对定义。
+    view: front

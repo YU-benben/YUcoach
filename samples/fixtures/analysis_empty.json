@@ -1,0 +1,358 @@
+{
+  "_fixture": true,
+  "_comment": "手工编写的测试数据，非真实测量值。这是最可能出现在真实场景里的状态：教练用普通视频拍，几乎所有指标都测不出来。",
+  "_authored_at": "2026-02-11",
+  "_schema_version": "1.0.0",
+  "_covers": "全部数据不足：覆盖 5 种 insufficient.reason，没有可判定指标，无结论，无关键帧",
+
+  "schema_version": "1.0.0",
+  "analysis_id": "a_s_20260303_at00011_01_v1",
+
+  "session": {
+    "schema_version": "1.0.0",
+    "session_id": "s_20260303_at00011_01",
+    "team_id": "t_sportschool_a",
+
+    "athlete": {
+      "athlete_id": "at_00011",
+      "name": "王五",
+      "gender": "male",
+      "height_cm": null,
+      "weight_kg": null,
+      "event": "100m",
+      "level": "high_school"
+    },
+
+    "recorded_at": "2026-03-03T10:05:00+08:00",
+    "test_type": "acceleration",
+    "view": "side",
+    "view_detected": "front",
+    "view_agreement": false,
+
+    "capture": {
+      "device_model": null,
+      "resolution": { "width": 1280, "height": 720 },
+      "frame_count": 300,
+      "duration_ms": 10000.0,
+      "fps_declared": 30.0,
+      "fps_verified": null,
+      "fps_verify": {
+        "methods": ["duration_check"],
+        "method_results": {
+          "duration_check": null
+        },
+        "agreement_pct": 0.0,
+        "status": "rejected",
+        "note": "只有一种方法可用，无法交叉验证；容器声明 30 fps，但帧数与时长对不上，真实帧率未知"
+      },
+      "distortion_corrected": false,
+      "camera": {
+        "distance_m": 6.0,
+        "height_m": null,
+        "axis_tilt_deg": null,
+        "exposure_locked": false,
+        "digital_zoom": true
+      }
+    },
+
+    "camera_motion": {
+      "level": "strong_pan",
+      "is_tracking": true,
+      "detected_by": "optical_flow",
+      "mean_shift_px_per_frame": 31.5,
+      "note": "运动员几乎全程处于画面边缘，镜头几乎跟不上"
+    },
+
+    "reference_scale": {
+      "method": "none",
+      "valid_per_frame": false,
+      "median_pixels_per_meter": null,
+      "reference_length_m": null,
+      "coverage_pct": 0.0,
+      "valid_region": null,
+      "note": "画面中无跑道分道线，运动员档案未填身高，无法建立任何参考尺度"
+    },
+
+    "quality_score": 18.0,
+    "quality_breakdown": {
+      "frame_rate": 0.0,
+      "reference_scale": 0.0,
+      "view_alignment": 0.0,
+      "frame_coverage": 3.0,
+      "valid_window_ratio": 0.0,
+      "exposure": 5.0,
+      "fps_agreement": 0.0
+    },
+
+    "video_url": "/v1/sessions/s_20260303_at00011_01/video",
+    "status": "done",
+    "created_by": "u_00012",
+    "created_at": "2026-03-03T10:09:44+08:00"
+  },
+
+  "versions": {
+    "algo_version": "1.0.0",
+    "model_version": "yolo11m-pose-halpe26-v1",
+    "rule_version": "1.0.0",
+    "std_version": "2026Q1"
+  },
+
+  "quality_score": 18.0,
+  "perspective_error_estimate": null,
+
+  "phases_detected": [],
+
+  "metrics": [
+    {
+      "metric_id": "step_frequency",
+      "name_zh": "步频",
+      "unit": "steps/min",
+      "view": "side",
+      "phase": "acceleration",
+      "event": null,
+      "side": "both",
+      "frame_index": null,
+      "time_ms": null,
+      "value": null,
+      "aggregate": null,
+      "valid_frame_count": 0,
+      "total_frame_count": 0,
+      "ref": null,
+      "deviation": null,
+      "confidence": null,
+      "reliability": "A",
+      "reliable": false,
+      "reliability_note": "帧率无法校验，无法计算时间类指标",
+      "perspective_error_estimate": null,
+      "insufficient": {
+        "reason": "frame_rate_unverified",
+        "required": "可交叉验证的帧率（至少两种校验方法）",
+        "actual": "仅一种方法可用，且容器声明值与帧数、时长互不自洽",
+        "impact": ["step_frequency", "ground_contact_time", "flight_time", "duty_factor"],
+        "suggestion": "用系统相机的慢动作模式重新拍摄，不要用剪辑软件导出；导出后不要做变速处理"
+      }
+    },
+    {
+      "metric_id": "ground_contact_time",
+      "name_zh": "触地时间",
+      "unit": "ms",
+      "view": "side",
+      "phase": "acceleration",
+      "event": null,
+      "side": null,
+      "frame_index": null,
+      "time_ms": null,
+      "value": null,
+      "aggregate": null,
+      "valid_frame_count": 0,
+      "total_frame_count": 0,
+      "ref": null,
+      "deviation": null,
+      "confidence": null,
+      "reliability": "A",
+      "reliable": false,
+      "reliability_note": "帧率无法校验",
+      "perspective_error_estimate": null,
+      "insufficient": {
+        "reason": "frame_rate_unverified",
+        "required": "≥120 fps 且帧率可交叉验证",
+        "actual": "声明 30 fps，真实帧率未知",
+        "impact": ["ground_contact_time", "flight_time", "duty_factor"],
+        "suggestion": "改用手机慢动作模式（120 或 240 fps）重新拍摄"
+      }
+    },
+    {
+      "metric_id": "shank_angle_touchdown",
+      "name_zh": "着地胫骨角",
+      "unit": "deg",
+      "view": "side",
+      "phase": "acceleration",
+      "event": "touchdown",
+      "side": null,
+      "frame_index": null,
+      "time_ms": null,
+      "value": null,
+      "aggregate": null,
+      "valid_frame_count": 0,
+      "total_frame_count": 0,
+      "ref": null,
+      "deviation": null,
+      "confidence": null,
+      "reliability": "A",
+      "reliable": false,
+      "reliability_note": "运动员几乎全程处于画面边缘",
+      "perspective_error_estimate": null,
+      "insufficient": {
+        "reason": "perspective_error",
+        "required": "运动员处于画面中心 ±20% 区域内",
+        "actual": "有效测量窗内仅 0 帧，运动员几乎全程贴画面边缘",
+        "impact": ["shank_angle_touchdown", "knee_angle_touchdown", "trunk_lean"],
+        "suggestion": "拍摄时让镜头提前跟上运动员，尽量让他保持在画面中央；必要时拍两段，分别覆盖起跑与途中跑"
+      }
+    },
+    {
+      "metric_id": "trunk_lean",
+      "name_zh": "躯干前倾角",
+      "unit": "deg",
+      "view": "side",
+      "phase": "acceleration",
+      "event": null,
+      "side": null,
+      "frame_index": null,
+      "time_ms": null,
+      "value": null,
+      "aggregate": null,
+      "valid_frame_count": 0,
+      "total_frame_count": 0,
+      "ref": null,
+      "deviation": null,
+      "confidence": null,
+      "reliability": "A",
+      "reliable": false,
+      "reliability_note": "有效帧数为 0",
+      "perspective_error_estimate": null,
+      "insufficient": {
+        "reason": "occlusion",
+        "required": "颈、髋关键点可见",
+        "actual": "躯干在多数帧被自身手臂遮挡，关键点置信度过低",
+        "impact": ["trunk_lean", "pelvis_tilt"],
+        "suggestion": "尽量从正侧面拍摄，避免斜后方；画面占比保持在 50-70% 之间"
+      }
+    },
+    {
+      "metric_id": "knee_valgus_touchdown",
+      "name_zh": "着地膝内扣角",
+      "unit": "deg",
+      "view": "front",
+      "phase": "acceleration",
+      "event": "touchdown",
+      "side": null,
+      "frame_index": null,
+      "time_ms": null,
+      "value": null,
+      "aggregate": null,
+      "valid_frame_count": 0,
+      "total_frame_count": 0,
+      "ref": null,
+      "deviation": null,
+      "confidence": null,
+      "reliability": "B",
+      "reliable": false,
+      "reliability_note": "该指标不适用于本次拍摄视角",
+      "perspective_error_estimate": null,
+      "insufficient": {
+        "reason": "view_mismatch",
+        "required": "正面或背面视角",
+        "actual": "申报为侧面视角，但检测结果倾向正面视角，两者不一致",
+        "impact": ["knee_valgus_touchdown", "pelvis_tilt", "stance_width_relative"],
+        "suggestion": "先确认本次拍摄是侧面还是正面；若需要评估膝内扣与骨盆控制，请补拍一段正面或背面视角"
+      }
+    },
+    {
+      "metric_id": "step_length",
+      "name_zh": "步幅",
+      "unit": "m",
+      "view": "side",
+      "phase": "acceleration",
+      "event": null,
+      "side": null,
+      "frame_index": null,
+      "time_ms": null,
+      "value": null,
+      "aggregate": null,
+      "valid_frame_count": 0,
+      "total_frame_count": 0,
+      "ref": null,
+      "deviation": null,
+      "confidence": null,
+      "reliability": "B",
+      "reliable": false,
+      "reliability_note": "无任何参考尺度",
+      "perspective_error_estimate": null,
+      "insufficient": {
+        "reason": "no_reference_scale",
+        "required": "画面中可见 ≥2 条跑道分道线，或提供运动员身高",
+        "actual": "画面中无分道线，运动员档案未填写身高",
+        "impact": ["step_length", "com_height_oscillation"],
+        "suggestion": "拍摄时让跑道分道线入画，或在运动员档案中补充身高"
+      }
+    },
+    {
+      "metric_id": "thigh_swing_range",
+      "name_zh": "大腿摆动幅度",
+      "unit": "deg",
+      "view": "side",
+      "phase": "acceleration",
+      "event": "swing_peak",
+      "side": null,
+      "frame_index": null,
+      "time_ms": null,
+      "value": null,
+      "aggregate": null,
+      "valid_frame_count": 0,
+      "total_frame_count": 0,
+      "ref": null,
+      "deviation": null,
+      "confidence": null,
+      "reliability": "B",
+      "reliable": false,
+      "reliability_note": "缺少摆动最高点事件",
+      "perspective_error_estimate": null,
+      "insufficient": {
+        "reason": "missing_event",
+        "required": "同一完整步态循环内的 touchdown / midstance / toe_off / swing_peak 四个事件",
+        "actual": "未能识别出任何完整步态循环",
+        "impact": ["thigh_swing_range", "knee_angular_velocity_peak"],
+        "suggestion": "确保拍摄覆盖至少 3 个完整步次，且运动员不在画面中出画"
+      }
+    }
+  ],
+
+  "findings": [
+    {
+      "finding_id": "f_0001",
+      "rule_id": null,
+      "rule_version": null,
+      "severity": "insufficient_data",
+      "view": "side",
+      "phase": "acceleration",
+      "title": "本次素材无法完成评估",
+      "metric_ids": [
+        "step_frequency",
+        "ground_contact_time",
+        "shank_angle_touchdown",
+        "trunk_lean",
+        "step_length"
+      ],
+      "evidence": [],
+      "explanation": "本次视频在帧率、参考尺度、有效画面区域三项上均不满足分析要求，系统无法输出任何可靠的运动学指标。",
+      "confidence": null,
+      "basis": null,
+      "caveat": null,
+      "drills": [],
+      "reason": "frame_rate_unverified",
+      "required": "≥120 fps 且帧率可交叉验证；画面中包含跑道分道线；运动员处于画面中心区域",
+      "actual": "声明 30 fps 且真实帧率未知；画面无分道线且未填身高；运动员几乎全程贴画面边缘",
+      "impact": [
+        "step_frequency",
+        "ground_contact_time",
+        "flight_time",
+        "duty_factor",
+        "shank_angle_touchdown",
+        "knee_angle_touchdown",
+        "trunk_lean",
+        "step_length"
+      ],
+      "suggestion": "按下面三点重拍一次即可：① 用手机「慢动作」模式（120 或 240 fps）；② 机位正对跑道侧面，让 2 条以上分道线入画；③ 提前起跟，让运动员保持在画面中央"
+    }
+  ],
+
+  "summary": {
+    "headline": "本次数据不足以完成评估，建议重新采集",
+    "major_count": 0,
+    "minor_count": 0,
+    "insufficient_count": 7
+  },
+
+  "keyframes": []
+}

@@ -1,0 +1,512 @@
+{
+  "_fixture": true,
+  "_comment": "手工编写的测试数据，非真实测量值。用于 App 在无后端时开发报告页。",
+  "_authored_at": "2026-02-11",
+  "_schema_version": "1.0.0",
+  "_covers": "主路径：全部指标有值，含 1 条 major 与 1 条 minor 结论，1 项数据不足",
+
+  "schema_version": "1.0.0",
+  "analysis_id": "a_s_20260301_at00007_01_v1",
+
+  "session": {
+    "schema_version": "1.0.0",
+    "session_id": "s_20260301_at00007_01",
+    "team_id": "t_sportschool_a",
+
+    "athlete": {
+      "athlete_id": "at_00007",
+      "name": "张三",
+      "gender": "male",
+      "height_cm": 178.0,
+      "weight_kg": 70.0,
+      "event": "100m",
+      "level": "college"
+    },
+
+    "recorded_at": "2026-03-01T09:15:00+08:00",
+    "test_type": "acceleration",
+    "view": "side",
+    "view_detected": "side",
+    "view_agreement": true,
+
+    "capture": {
+      "device_model": "Xiaomi 14",
+      "resolution": { "width": 1920, "height": 1080 },
+      "frame_count": 2400,
+      "duration_ms": 10000.0,
+      "fps_declared": 30.0,
+      "fps_verified": 240.0,
+      "fps_verify": {
+        "methods": ["duration_check", "cadence_backcalc"],
+        "method_results": {
+          "duration_check": 240.0,
+          "cadence_backcalc": 242.1
+        },
+        "agreement_pct": 1.2,
+        "status": "verified",
+        "note": null
+      },
+      "distortion_corrected": true,
+      "camera": {
+        "distance_m": 10.0,
+        "height_m": 1.15,
+        "axis_tilt_deg": 1.5,
+        "exposure_locked": true,
+        "digital_zoom": false
+      }
+    },
+
+    "camera_motion": {
+      "level": "slight_pan",
+      "is_tracking": true,
+      "detected_by": "optical_flow",
+      "mean_shift_px_per_frame": 8.4,
+      "note": "检测到镜头跟随运动员水平移动"
+    },
+
+    "reference_scale": {
+      "method": "lane_line",
+      "valid_per_frame": true,
+      "median_pixels_per_meter": 312.5,
+      "reference_length_m": 1.22,
+      "coverage_pct": 62.0,
+      "valid_region": { "x_min": 0.25, "x_max": 0.85 },
+      "note": "62% 的帧可检测到 ≥2 条分道线，其余帧缺少参考尺度"
+    },
+
+    "quality_score": 78.0,
+    "quality_breakdown": {
+      "frame_rate": 25.0,
+      "reference_scale": 18.0,
+      "view_alignment": 13.5,
+      "frame_coverage": 8.0,
+      "valid_window_ratio": 9.0,
+      "exposure": 10.0,
+      "fps_agreement": 4.5
+    },
+
+    "video_url": "/v1/sessions/s_20260301_at00007_01/video",
+    "status": "done",
+    "created_by": "u_00012",
+    "created_at": "2026-03-01T09:20:31+08:00"
+  },
+
+  "versions": {
+    "algo_version": "1.0.0",
+    "model_version": "yolo11m-pose-halpe26-v1",
+    "rule_version": "1.0.0",
+    "std_version": "2026Q1"
+  },
+
+  "quality_score": 78.0,
+  "perspective_error_estimate": 2.1,
+
+  "phases_detected": [
+    { "phase": "start", "frame_start": 926, "frame_end": 947, "confidence": 0.94 },
+    { "phase": "acceleration", "frame_start": 947, "frame_end": 1010, "confidence": 0.88 },
+    { "phase": "transition", "frame_start": 1010, "frame_end": 1088, "confidence": 0.71 }
+  ],
+
+  "metrics": [
+    {
+      "metric_id": "shank_angle_touchdown",
+      "name_zh": "着地胫骨角",
+      "unit": "deg",
+      "view": "side",
+      "phase": "acceleration",
+      "event": "touchdown",
+      "side": "R",
+      "frame_index": 951,
+      "time_ms": 104.2,
+      "value": 12.4,
+      "aggregate": { "mean": 11.8, "sd": 1.6, "n": 3, "min": 9.9, "max": 13.1 },
+      "valid_frame_count": 3,
+      "total_frame_count": 3,
+      "ref": {
+        "low": 8.0,
+        "high": 18.0,
+        "mean": 13.0,
+        "sd": 4.0,
+        "source": "literature",
+        "applicable_phase": "acceleration",
+        "view": "side",
+        "std_version": "2026Q1"
+      },
+      "deviation": -0.3,
+      "confidence": 0.91,
+      "reliability": "A",
+      "reliable": true,
+      "reliability_note": null,
+      "perspective_error_estimate": 1.4,
+      "insufficient": null
+    },
+    {
+      "metric_id": "knee_angle_touchdown",
+      "name_zh": "着地膝角",
+      "unit": "deg",
+      "view": "side",
+      "phase": "acceleration",
+      "event": "touchdown",
+      "side": "R",
+      "frame_index": 951,
+      "time_ms": 104.2,
+      "value": 158.2,
+      "aggregate": { "mean": 157.4, "sd": 2.1, "n": 3, "min": 155.0, "max": 159.1 },
+      "valid_frame_count": 3,
+      "total_frame_count": 3,
+      "ref": {
+        "low": 150.0,
+        "high": 178.0,
+        "mean": 164.0,
+        "sd": 7.0,
+        "source": "literature",
+        "applicable_phase": "acceleration",
+        "view": "side",
+        "std_version": "2026Q1"
+      },
+      "deviation": -0.83,
+      "confidence": 0.93,
+      "reliability": "A",
+      "reliable": true,
+      "reliability_note": null,
+      "perspective_error_estimate": 1.4,
+      "insufficient": null
+    },
+    {
+      "metric_id": "knee_angle_midstance",
+      "name_zh": "支撑中期膝角",
+      "unit": "deg",
+      "view": "side",
+      "phase": "acceleration",
+      "event": "midstance",
+      "side": "R",
+      "frame_index": 955,
+      "time_ms": 120.8,
+      "value": 142.0,
+      "aggregate": { "mean": 141.2, "sd": 1.9, "n": 3, "min": 139.0, "max": 143.4 },
+      "valid_frame_count": 3,
+      "total_frame_count": 3,
+      "ref": {
+        "low": 130.0,
+        "high": 155.0,
+        "mean": 143.0,
+        "sd": 6.0,
+        "source": "literature",
+        "applicable_phase": "acceleration",
+        "view": "side",
+        "std_version": "2026Q1"
+      },
+      "deviation": -0.3,
+      "confidence": 0.9,
+      "reliability": "A",
+      "reliable": true,
+      "reliability_note": null,
+      "perspective_error_estimate": 1.2,
+      "insufficient": null
+    },
+    {
+      "metric_id": "trunk_lean",
+      "name_zh": "躯干前倾角",
+      "unit": "deg",
+      "view": "side",
+      "phase": "acceleration",
+      "event": null,
+      "side": "both",
+      "frame_index": null,
+      "time_ms": null,
+      "value": 52.4,
+      "aggregate": { "mean": 38.2, "sd": 2.4, "n": 3, "min": 36.1, "max": 40.0 },
+      "valid_frame_count": 38,
+      "total_frame_count": 64,
+      "ref": {
+        "low": 45.0,
+        "high": 60.0,
+        "mean": 52.5,
+        "sd": 4.2,
+        "source": "literature",
+        "applicable_phase": "acceleration",
+        "view": "side",
+        "std_version": "2026Q1"
+      },
+      "deviation": -3.4,
+      "confidence": 0.82,
+      "reliability": "A",
+      "reliable": true,
+      "reliability_note": null,
+      "perspective_error_estimate": 2.1,
+      "insufficient": null
+    },
+    {
+      "metric_id": "ground_contact_time",
+      "name_zh": "触地时间",
+      "unit": "ms",
+      "view": "side",
+      "phase": "acceleration",
+      "event": "touchdown",
+      "side": "R",
+      "frame_index": 951,
+      "time_ms": 104.2,
+      "value": 183.0,
+      "aggregate": { "mean": 178.4, "sd": 6.2, "n": 3, "min": 172.0, "max": 184.1 },
+      "valid_frame_count": 3,
+      "total_frame_count": 3,
+      "ref": {
+        "low": 120.0,
+        "high": 200.0,
+        "mean": 155.0,
+        "sd": 22.0,
+        "source": "literature",
+        "applicable_phase": "acceleration",
+        "view": "side",
+        "std_version": "2026Q1"
+      },
+      "deviation": 1.06,
+      "confidence": 0.88,
+      "reliability": "A",
+      "reliable": true,
+      "reliability_note": null,
+      "perspective_error_estimate": null,
+      "insufficient": null
+    },
+    {
+      "metric_id": "step_frequency",
+      "name_zh": "步频",
+      "unit": "steps/min",
+      "view": "side",
+      "phase": "acceleration",
+      "event": null,
+      "side": "both",
+      "frame_index": null,
+      "time_ms": null,
+      "value": 240.0,
+      "aggregate": { "mean": 236.0, "sd": 5.3, "n": 3, "min": 231.0, "max": 241.0 },
+      "valid_frame_count": 3,
+      "total_frame_count": 3,
+      "ref": {
+        "low": 210.0,
+        "high": 260.0,
+        "mean": 235.0,
+        "sd": 14.0,
+        "source": "team",
+        "applicable_phase": "acceleration",
+        "view": "side",
+        "std_version": "2026Q1"
+      },
+      "deviation": 0.07,
+      "confidence": 0.86,
+      "reliability": "A",
+      "reliable": true,
+      "reliability_note": null,
+      "perspective_error_estimate": null,
+      "insufficient": null
+    },
+    {
+      "metric_id": "step_length",
+      "name_zh": "步幅",
+      "unit": "m",
+      "view": "side",
+      "phase": "acceleration",
+      "event": "touchdown",
+      "side": "R",
+      "frame_index": null,
+      "time_ms": null,
+      "value": null,
+      "aggregate": null,
+      "valid_frame_count": 0,
+      "total_frame_count": 3,
+      "ref": null,
+      "deviation": null,
+      "confidence": null,
+      "reliability": "B",
+      "reliable": false,
+      "reliability_note": "缺少参考尺度，无法进行像素到米的换算",
+      "perspective_error_estimate": null,
+      "insufficient": {
+        "reason": "no_reference_scale",
+        "required": "画面中可见 ≥2 条跑道分道线，或提供运动员身高",
+        "actual": "仅 62% 的帧可检测到分道线，且运动员档案未填写身高",
+        "impact": ["step_length", "com_height_oscillation"],
+        "suggestion": "拍摄时让跑道分道线入画，或在运动员档案中补充身高；其余指标不受影响"
+      }
+    }
+  ],
+
+  "findings": [
+    {
+      "finding_id": "f_0001",
+      "rule_id": "R_SIDE_ACC_TRUNK_TOO_UPRIGHT",
+      "rule_version": "1.0.0",
+      "severity": "major",
+      "view": "side",
+      "phase": "acceleration",
+      "title": "加速段躯干过早直立",
+      "metric_ids": ["trunk_lean"],
+      "evidence": [
+        {
+          "metric_id": "trunk_lean",
+          "value": 38.2,
+          "ref_low": 45.0,
+          "ref_high": 60.0,
+          "deviation_text": "低于下限 6.8°",
+          "phase": "acceleration",
+          "frame_index": 966
+        }
+      ],
+      "explanation": "加速段躯干前倾角小于该阶段应有范围，说明身体过早抬起，会缩短水平推进的有效做功距离。",
+      "confidence": 0.85,
+      "basis": "normal",
+      "caveat": null,
+      "drills": [
+        {
+          "drill_id": "D_007",
+          "name": "推墙加速跑",
+          "sets": "4 组",
+          "reps": "8 次",
+          "duration": null,
+          "cue": "保持躯干前倾，让身体呈一条斜线",
+          "mechanism": "在无位移条件下强化前倾发力姿态的神经记忆，使加速段的身体角度形成自动化模式",
+          "video_url": null
+        }
+      ],
+      "reason": null,
+      "required": null,
+      "actual": null,
+      "impact": null,
+      "suggestion": null
+    },
+    {
+      "finding_id": "f_0002",
+      "rule_id": "R_SIDE_ACC_LONG_CONTACT",
+      "rule_version": "1.0.0",
+      "severity": "minor",
+      "view": "side",
+      "phase": "acceleration",
+      "title": "加速段触地时间偏长",
+      "metric_ids": ["ground_contact_time"],
+      "evidence": [
+        {
+          "metric_id": "ground_contact_time",
+          "value": 183.0,
+          "ref_low": 120.0,
+          "ref_high": 200.0,
+          "deviation_text": "高于本队均值 23 ms",
+          "phase": "acceleration",
+          "frame_index": 951
+        }
+      ],
+      "explanation": "支撑期偏长会延长制动阶段、推迟蹬伸发力的时机，减少单位时间内的推进次数。",
+      "confidence": 0.72,
+      "basis": "normal",
+      "caveat": null,
+      "drills": [
+        {
+          "drill_id": "D_015",
+          "name": "原地快速踏步",
+          "sets": "3 组",
+          "reps": "15 秒",
+          "duration": "15 秒",
+          "cue": "脚掌快速离开地面，像踩到烫的东西",
+          "mechanism": "缩短单次支撑时间，建立快速离地的节奏感",
+          "video_url": null
+        }
+      ],
+      "reason": null,
+      "required": null,
+      "actual": null,
+      "impact": null,
+      "suggestion": null
+    },
+    {
+      "finding_id": "f_0003",
+      "rule_id": null,
+      "rule_version": null,
+      "severity": "insufficient_data",
+      "view": "side",
+      "phase": "acceleration",
+      "title": "步幅无法评估",
+      "metric_ids": ["step_length"],
+      "evidence": [],
+      "explanation": "缺少参考尺度，无法把画面中的像素距离换算为实际距离。",
+      "confidence": null,
+      "basis": null,
+      "caveat": null,
+      "drills": [],
+      "reason": "no_reference_scale",
+      "required": "画面中可见 ≥2 条跑道分道线，或提供运动员身高",
+      "actual": "仅 62% 的帧可检测到分道线，且运动员档案未填写身高",
+      "impact": ["step_length", "com_height_oscillation"],
+      "suggestion": "拍摄时让跑道分道线入画，或在运动员档案中补充身高；其余指标不受影响"
+    }
+  ],
+
+  "summary": {
+    "headline": "加速段躯干前倾不足，触地时间略偏长",
+    "major_count": 1,
+    "minor_count": 1,
+    "insufficient_count": 1
+  },
+
+  "keyframes": [
+    {
+      "frame_index": 951,
+      "event": "touchdown",
+      "side": "R",
+      "step_index": 1,
+      "phase": "acceleration",
+      "image_url": "/v1/analyses/a_s_20260301_at00007_01_v1/keyframes/951.png",
+      "pixels_per_meter": 315.8,
+      "annotations": [
+        {
+          "metric_id": "shank_angle_touchdown",
+          "value": 12.4,
+          "unit": "deg",
+          "ref_low": 8.0,
+          "ref_high": 18.0
+        },
+        {
+          "metric_id": "knee_angle_touchdown",
+          "value": 158.2,
+          "unit": "deg",
+          "ref_low": 150.0,
+          "ref_high": 178.0
+        }
+      ]
+    },
+    {
+      "frame_index": 955,
+      "event": "midstance",
+      "side": "R",
+      "step_index": 1,
+      "phase": "acceleration",
+      "image_url": "/v1/analyses/a_s_20260301_at00007_01_v1/keyframes/955.png",
+      "pixels_per_meter": 317.1,
+      "annotations": [
+        {
+          "metric_id": "knee_angle_midstance",
+          "value": 142.0,
+          "unit": "deg",
+          "ref_low": 130.0,
+          "ref_high": 155.0
+        }
+      ]
+    },
+    {
+      "frame_index": 966,
+      "event": "touchdown",
+      "side": "L",
+      "step_index": 2,
+      "phase": "acceleration",
+      "image_url": "/v1/analyses/a_s_20260301_at00007_01_v1/keyframes/966.png",
+      "pixels_per_meter": 319.4,
+      "annotations": [
+        {
+          "metric_id": "trunk_lean",
+          "value": 38.2,
+          "unit": "deg",
+          "ref_low": 45.0,
+          "ref_high": 60.0
+        }
+      ]
+    }
+  ]
+}

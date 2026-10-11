@@ -1,0 +1,428 @@
+{
+  "_fixture": true,
+  "_comment": "手工编写的测试数据，非真实测量值。用于验证「低置信」状态的界面表现。",
+  "_authored_at": "2026-02-11",
+  "_schema_version": "1.0.0",
+  "_covers": "低置信状态：帧率不足导致时间类指标不可用、跟踪过快导致透视误差超标、含 caveat 的结论",
+
+  "schema_version": "1.0.0",
+  "analysis_id": "a_s_20260302_at00009_01_v1",
+
+  "session": {
+    "schema_version": "1.0.0",
+    "session_id": "s_20260302_at00009_01",
+    "team_id": "t_sportschool_a",
+
+    "athlete": {
+      "athlete_id": "at_00009",
+      "name": "李四",
+      "gender": "male",
+      "height_cm": 172.0,
+      "weight_kg": 63.0,
+      "event": "100m",
+      "level": "high_school"
+    },
+
+    "recorded_at": "2026-03-02T16:40:00+08:00",
+    "test_type": "acceleration",
+    "view": "side",
+    "view_detected": "side",
+    "view_agreement": true,
+
+    "capture": {
+      "device_model": "OPPO Find X6",
+      "resolution": { "width": 1920, "height": 1080 },
+      "frame_count": 600,
+      "duration_ms": 10000.0,
+      "fps_declared": 60.0,
+      "fps_verified": 60.0,
+      "fps_verify": {
+        "methods": ["duration_check", "cadence_backcalc", "scale_displacement"],
+        "method_results": {
+          "duration_check": 60.0,
+          "cadence_backcalc": 56.5,
+          "scale_displacement": 63.2
+        },
+        "agreement_pct": 11.1,
+        "status": "warning",
+        "note": "三种方法偏差 11.1%，处于 5-15% 警告区间，时间类指标精度受限"
+      },
+      "distortion_corrected": false,
+      "camera": {
+        "distance_m": 8.0,
+        "height_m": 1.05,
+        "axis_tilt_deg": 4.5,
+        "exposure_locked": false,
+        "digital_zoom": true
+      }
+    },
+
+    "camera_motion": {
+      "level": "strong_pan",
+      "is_tracking": true,
+      "detected_by": "optical_flow",
+      "mean_shift_px_per_frame": 22.7,
+      "note": "镜头跟随速度较快，运动员多次接近画面边缘"
+    },
+
+    "reference_scale": {
+      "method": "height_derived",
+      "valid_per_frame": true,
+      "median_pixels_per_meter": 268.0,
+      "reference_length_m": 1.72,
+      "coverage_pct": 100.0,
+      "valid_region": null,
+      "note": "画面中未见跑道分道线，改用运动员身高推算，个体比例误差约 5-10%"
+    },
+
+    "quality_score": 52.0,
+    "quality_breakdown": {
+      "frame_rate": 13.0,
+      "reference_scale": 10.0,
+      "view_alignment": 1.5,
+      "frame_coverage": 4.0,
+      "valid_window_ratio": 6.0,
+      "exposure": 5.0,
+      "fps_agreement": 2.5
+    },
+
+    "video_url": "/v1/sessions/s_20260302_at00009_01/video",
+    "status": "done",
+    "created_by": "u_00012",
+    "created_at": "2026-03-02T16:45:10+08:00"
+  },
+
+  "versions": {
+    "algo_version": "1.0.0",
+    "model_version": "yolo11m-pose-halpe26-v1",
+    "rule_version": "1.0.0",
+    "std_version": "2026Q1"
+  },
+
+  "quality_score": 52.0,
+  "perspective_error_estimate": 4.3,
+
+  "phases_detected": [
+    { "phase": "start", "frame_start": 88, "frame_end": 104, "confidence": 0.79 },
+    { "phase": "acceleration", "frame_start": 104, "frame_end": 190, "confidence": 0.62 }
+  ],
+
+  "metrics": [
+    {
+      "metric_id": "shank_angle_touchdown",
+      "name_zh": "着地胫骨角",
+      "unit": "deg",
+      "view": "side",
+      "phase": "acceleration",
+      "event": "touchdown",
+      "side": "R",
+      "frame_index": 104,
+      "time_ms": 266.7,
+      "value": 15.8,
+      "aggregate": { "mean": 16.2, "sd": 1.9, "n": 3, "min": 14.1, "max": 17.8 },
+      "valid_frame_count": 3,
+      "total_frame_count": 3,
+      "ref": {
+        "low": 8.0,
+        "high": 18.0,
+        "mean": 13.0,
+        "sd": 4.0,
+        "source": "literature",
+        "applicable_phase": "acceleration",
+        "view": "side",
+        "std_version": "2026Q1"
+      },
+      "deviation": 0.8,
+      "confidence": 0.66,
+      "reliability": "A",
+      "reliable": true,
+      "reliability_note": "运动员处于画面边缘，透视误差约 4°，该值可能偏小",
+      "perspective_error_estimate": 4.3,
+      "insufficient": null
+    },
+    {
+      "metric_id": "trunk_lean",
+      "name_zh": "躯干前倾角",
+      "unit": "deg",
+      "view": "side",
+      "phase": "acceleration",
+      "event": null,
+      "side": "both",
+      "frame_index": null,
+      "time_ms": null,
+      "value": 41.0,
+      "aggregate": { "mean": 40.5, "sd": 3.1, "n": 3, "min": 37.2, "max": 43.8 },
+      "valid_frame_count": 21,
+      "total_frame_count": 64,
+      "ref": {
+        "low": 45.0,
+        "high": 60.0,
+        "mean": 52.5,
+        "sd": 4.2,
+        "source": "literature",
+        "applicable_phase": "acceleration",
+        "view": "side",
+        "std_version": "2026Q1"
+      },
+      "deviation": -2.86,
+      "confidence": 0.58,
+      "reliability": "A",
+      "reliable": true,
+      "reliability_note": "仅 21/64 帧处于有效测量窗内，透视误差约 4.3°，结论需谨慎",
+      "perspective_error_estimate": 4.3,
+      "insufficient": null
+    },
+    {
+      "metric_id": "step_frequency",
+      "name_zh": "步频",
+      "unit": "steps/min",
+      "view": "side",
+      "phase": "acceleration",
+      "event": null,
+      "side": "both",
+      "frame_index": null,
+      "time_ms": null,
+      "value": 252.0,
+      "aggregate": { "mean": 249.0, "sd": 7.4, "n": 3, "min": 241.0, "max": 256.0 },
+      "valid_frame_count": 3,
+      "total_frame_count": 3,
+      "ref": {
+        "low": 210.0,
+        "high": 260.0,
+        "mean": 235.0,
+        "sd": 14.0,
+        "source": "literature",
+        "applicable_phase": "acceleration",
+        "view": "side",
+        "std_version": "2026Q1"
+      },
+      "deviation": 1.21,
+      "confidence": 0.71,
+      "reliability": "A",
+      "reliable": true,
+      "reliability_note": null,
+      "perspective_error_estimate": null,
+      "insufficient": null
+    },
+    {
+      "metric_id": "ground_contact_time",
+      "name_zh": "触地时间",
+      "unit": "ms",
+      "view": "side",
+      "phase": "acceleration",
+      "event": "touchdown",
+      "side": "R",
+      "frame_index": 104,
+      "time_ms": 266.7,
+      "value": 183.0,
+      "aggregate": { "mean": 181.0, "sd": 5.1, "n": 3, "min": 176.0, "max": 186.0 },
+      "valid_frame_count": 3,
+      "total_frame_count": 3,
+      "ref": {
+        "low": 120.0,
+        "high": 200.0,
+        "mean": 155.0,
+        "sd": 22.0,
+        "source": "literature",
+        "applicable_phase": "acceleration",
+        "view": "side",
+        "std_version": "2026Q1"
+      },
+      "deviation": 1.18,
+      "confidence": 0.32,
+      "reliability": "A",
+      "reliable": false,
+      "reliability_note": "帧率 60 fps 且校验偏差 11.1%，单帧误差约 17 ms，触地仅 11 帧，误差可能超过 20%",
+      "perspective_error_estimate": null,
+      "insufficient": null
+    },
+    {
+      "metric_id": "flight_time",
+      "name_zh": "腾空时间",
+      "unit": "ms",
+      "view": "side",
+      "phase": "acceleration",
+      "event": "touchdown",
+      "side": "R",
+      "frame_index": 115,
+      "time_ms": 450.0,
+      "value": 67.0,
+      "aggregate": { "mean": 69.0, "sd": 4.6, "n": 3, "min": 64.0, "max": 73.0 },
+      "valid_frame_count": 3,
+      "total_frame_count": 3,
+      "ref": {
+        "low": 80.0,
+        "high": 140.0,
+        "mean": 108.0,
+        "sd": 18.0,
+        "source": "literature",
+        "applicable_phase": "acceleration",
+        "view": "side",
+        "std_version": "2026Q1"
+      },
+      "deviation": -2.17,
+      "confidence": 0.30,
+      "reliability": "A",
+      "reliable": false,
+      "reliability_note": "帧率 60 fps 下腾空仅 4 帧，单帧误差占 25%，该值不可用于判断",
+      "perspective_error_estimate": null,
+      "insufficient": null
+    },
+    {
+      "metric_id": "step_length",
+      "name_zh": "步幅",
+      "unit": "m",
+      "view": "side",
+      "phase": "acceleration",
+      "event": "touchdown",
+      "side": "R",
+      "frame_index": null,
+      "time_ms": null,
+      "value": 1.42,
+      "aggregate": { "mean": 1.38, "sd": 0.06, "n": 3, "min": 1.32, "max": 1.45 },
+      "valid_frame_count": 3,
+      "total_frame_count": 3,
+      "ref": null,
+      "deviation": null,
+      "confidence": 0.44,
+      "reliability": "B",
+      "reliable": false,
+      "reliability_note": "参考尺度由运动员身高推算，未做畸变校正，且相机使用了数码变焦，误差可能达 10%",
+      "perspective_error_estimate": null,
+      "insufficient": null
+    }
+  ],
+
+  "findings": [
+    {
+      "finding_id": "f_0001",
+      "rule_id": "R_SIDE_ACC_TRUNK_TOO_UPRIGHT",
+      "rule_version": "1.0.0",
+      "severity": "major",
+      "view": "side",
+      "phase": "acceleration",
+      "title": "加速段躯干可能过早直立",
+      "metric_ids": ["trunk_lean"],
+      "evidence": [
+        {
+          "metric_id": "trunk_lean",
+          "value": 40.5,
+          "ref_low": 45.0,
+          "ref_high": 60.0,
+          "deviation_text": "低于下限 4.5°",
+          "phase": "acceleration",
+          "frame_index": 130
+        }
+      ],
+      "explanation": "加速段躯干前倾角小于该阶段应有范围，说明身体过早抬起，会缩短水平推进的有效做功距离。",
+      "confidence": 0.48,
+      "basis": "low_reliability",
+      "caveat": "本次仅 21/64 帧处于有效测量窗内，且运动员多次接近画面边缘，透视误差约 4.3°，可能低估了实际前倾角。建议重拍确认。",
+      "drills": [
+        {
+          "drill_id": "D_007",
+          "name": "推墙加速跑",
+          "sets": "4 组",
+          "reps": "8 次",
+          "duration": null,
+          "cue": "保持躯干前倾，让身体呈一条斜线",
+          "mechanism": "在无位移条件下强化前倾发力姿态的神经记忆，使加速段的身体角度形成自动化模式",
+          "video_url": null
+        }
+      ],
+      "reason": null,
+      "required": null,
+      "actual": null,
+      "impact": null,
+      "suggestion": null
+    },
+    {
+      "finding_id": "f_0002",
+      "rule_id": "R_SIDE_ACC_LONG_CONTACT",
+      "rule_version": "1.0.0",
+      "severity": "minor",
+      "view": "side",
+      "phase": "acceleration",
+      "title": "加速段触地时间偏长",
+      "metric_ids": ["ground_contact_time"],
+      "evidence": [
+        {
+          "metric_id": "ground_contact_time",
+          "value": 181.0,
+          "ref_low": 120.0,
+          "ref_high": 200.0,
+          "deviation_text": "高于该阶段常见范围中位值 26 ms",
+          "phase": "acceleration",
+          "frame_index": 104
+        }
+      ],
+      "explanation": "支撑期偏长会延长制动阶段、推迟蹬伸发力的时机，减少单位时间内的推进次数。",
+      "confidence": 0.35,
+      "basis": "low_reliability",
+      "caveat": "触地时间依赖帧率：本次为 60 fps，触地期内仅 11 帧，单帧误差约 17 ms，该结论仅供参考，不足以支撑训练决策。",
+      "drills": [
+        {
+          "drill_id": "D_015",
+          "name": "原地快速踏步",
+          "sets": "3 组",
+          "reps": "15 秒",
+          "duration": "15 秒",
+          "cue": "脚掌快速离开地面，像踩到烫的东西",
+          "mechanism": "缩短单次支撑时间，建立快速离地的节奏感",
+          "video_url": null
+        }
+      ],
+      "reason": null,
+      "required": null,
+      "actual": null,
+      "impact": null,
+      "suggestion": null
+    }
+  ],
+
+  "summary": {
+    "headline": "疑似加速段躯干过早直立，但本次素材精度受限",
+    "major_count": 1,
+    "minor_count": 1,
+    "insufficient_count": 0
+  },
+
+  "keyframes": [
+    {
+      "frame_index": 104,
+      "event": "touchdown",
+      "side": "R",
+      "step_index": 1,
+      "phase": "acceleration",
+      "image_url": "/v1/analyses/a_s_20260302_at00009_01_v1/keyframes/104.png",
+      "pixels_per_meter": 265.4,
+      "annotations": [
+        {
+          "metric_id": "shank_angle_touchdown",
+          "value": 15.8,
+          "unit": "deg",
+          "ref_low": 8.0,
+          "ref_high": 18.0
+        }
+      ]
+    },
+    {
+      "frame_index": 130,
+      "event": "midstance",
+      "side": "R",
+      "step_index": 2,
+      "phase": "acceleration",
+      "image_url": "/v1/analyses/a_s_20260302_at00009_01_v1/keyframes/130.png",
+      "pixels_per_meter": 271.2,
+      "annotations": [
+        {
+          "metric_id": "trunk_lean",
+          "value": 40.5,
+          "unit": "deg",
+          "ref_low": 45.0,
+          "ref_high": 60.0
+        }
+      ]
+    }
+  ]
+}

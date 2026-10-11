@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 8.0+ 的自适应图标：背景层 + 前景层。
+     系统按设备主题裁切成圆形/方形/水滴形。
+     前景层的内容只在中间 72/108 区域可见，见 gen_icons.py 的说明。 -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+</adaptive-icon>

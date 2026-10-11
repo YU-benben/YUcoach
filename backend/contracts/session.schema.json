@@ -1,0 +1,243 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://yucoach.local/contracts/session.schema.json",
+  "title": "Session",
+  "description": "采集场次。一次上传 = 一个 Session。定义来源：docs/07-数据契约.md §4",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "session_id",
+    "team_id",
+    "athlete",
+    "recorded_at",
+    "test_type",
+    "view",
+    "capture",
+    "quality_score",
+    "view_agreement",
+    "status"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "契约版本，语义化版本格式",
+      "examples": [
+        "1.1.0"
+      ]
+    },
+    "session_id": {
+      "type": "string",
+      "pattern": "^s_\\d{8}_at\\d{5}_\\d{2}$",
+      "examples": [
+        "s_20260301_at00007_01"
+      ]
+    },
+    "team_id": {
+      "type": "string"
+    },
+    "athlete": {
+      "$ref": "common.schema.json#/$defs/Athlete"
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "采集时间，非报告生成时间"
+    },
+    "test_type": {
+      "$ref": "common.schema.json#/$defs/TestType"
+    },
+    "view": {
+      "allOf": [
+        {
+          "$ref": "common.schema.json#/$defs/View"
+        }
+      ],
+      "description": "用户声明的拍摄视角。决定计算哪些指标"
+    },
+    "view_detected": {
+      "allOf": [
+        {
+          "$ref": "common.schema.json#/$defs/View"
+        }
+      ],
+      "description": "系统自动推断的视角，用于交叉校验"
+    },
+    "view_agreement": {
+      "type": "boolean",
+      "description": "声明与推断是否一致。false 时报告需附提示"
+    },
+    "capture": {
+      "type": "object",
+      "required": [
+        "resolution",
+        "frame_count",
+        "fps_declared",
+        "fps_verified",
+        "fps_verify"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "device_model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resolution": {
+          "type": "object",
+          "required": [
+            "width",
+            "height"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "width": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "height": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "frame_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "duration_ms": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "fps_declared": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "容器声明值。仅用于比对，不得用于计算"
+        },
+        "fps_verified": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "校验认定值。所有时间换算必须使用它"
+        },
+        "fps_verify": {
+          "$ref": "common.schema.json#/$defs/FpsVerify"
+        },
+        "distortion_corrected": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "是否执行了镜头畸变校正"
+        },
+        "camera": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "distance_m": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "height_m": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "axis_tilt_deg": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "exposure_locked": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "digital_zoom": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "camera_motion": {
+      "allOf": [
+        {
+          "$ref": "common.schema.json#/$defs/CameraMotion"
+        }
+      ],
+      "description": "镜头运动检测结果"
+    },
+    "reference_scale": {
+      "allOf": [
+        {
+          "$ref": "common.schema.json#/$defs/ReferenceScale"
+        }
+      ],
+      "description": "参考尺度汇总信息"
+    },
+    "quality_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "拍摄质量分。≥75 正常，55-74 附横幅，<55 不建议用于训练决策"
+    },
+    "quality_breakdown": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "description": "质量分各分项得分，用于向用户解释扣分原因",
+      "additionalProperties": {
+        "type": "number"
+      }
+    },
+    "video_url": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "uploaded",
+        "queued",
+        "processing",
+        "done",
+        "failed"
+      ]
+    },
+    "created_by": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "created_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    }
+  }
+}

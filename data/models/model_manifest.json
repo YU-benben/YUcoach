@@ -1,0 +1,112 @@
+{
+  "_comment": [
+    "模型清单。",
+
+    "为什么需要这个文件：",
+    "  模型是可以替换的（微调后换文件即可），但换完之后没人知道",
+    "  差别在哪。这份清单记录每个模型的身份、验证结果和已知缺陷，",
+    "  让'换模型'这件事可追溯 —— 尤其是对拍时要知道两边是不是同一个模型。",
+
+    "契约里的 versions.model_version 应当填这里的 model_version。"
+  ],
+
+  "active": {
+    "model_version": "yolov8n-pose-coco-official",
+    "base_model": "yolov8n-pose",
+    "source": "Ultralytics 官方 COCO 预训练权重",
+    "trained_on": "COCO keypoints（未做任何微调）",
+    "keypoint_format": "coco17",
+    "keypoint_count": 17,
+    "provides_foot_keypoints": false,
+
+    "artifacts": {
+      "pytorch": {
+        "file": ".cache/models/yolov8n-pose.pt",
+        "size_mb": 6.52,
+        "used_by": "电脑端分析（backend/analysis/pose_estimator.py）"
+      },
+      "onnx_640": {
+        "file": ".cache/models/exported/yolov8n-pose-640.onnx",
+        "size_mb": 12.89,
+        "input_size": 640,
+        "opset": 12,
+        "dynamic": false,
+        "used_by": "手机端推理（计划中）",
+        "export_command": "yolo export model=yolov8n-pose.pt format=onnx imgsz=640 opset=12 simplify=True dynamic=False"
+      },
+      "onnx_960": {
+        "file": ".cache/models/exported/yolov8n-pose-960.onnx",
+        "size_mb": 13.21,
+        "input_size": 960,
+        "opset": 12,
+        "dynamic": false,
+        "used_by": "仅用于对拍，不用于部署"
+      }
+    },
+
+    "verification": {
+      "method": "端到端对拍：同一批真实视频帧，用完整 Ultralytics 流程（含 NMS 与后处理）分别跑 .pt 与 .onnx，比较最终 17 个关键点的像素坐标",
+      "script": "scripts/verify_onnx_parity.py",
+      "benchmark_script": "scripts/export_pose_onnx.py",
+      "sample": "samples/videos/训练素材刘珉宇.mp4，均匀取 5 帧",
+
+      "onnx_640": {
+        "verdict": "一致",
+        "max_pixel_diff": 0.58,
+        "frames_compared": 5,
+        "note": "亚像素级，完全可忽略"
+      },
+
+      "onnx_960": {
+        "verdict": "可接受",
+        "max_pixel_diff": 8.78,
+        "mean_pixel_diff": 1.30,
+        "frames_compared": 6,
+        "note": [
+          "差异与关键点的网络深度和置信度强相关：",
+          "  面部（鼻/眼/耳）0.6~1.6 px —— 浅层，误差累积最少",
+          "  肩/髋          0.9~1.6 px",
+          "  肘/腕          1.0~1.7 px",
+          "  踝             1.4~3.2 px（最大 8.78）—— 最深，累积最多",
+          "",
+          "这是浮点误差在深层累积的典型表现，不是选人错误或映射错误。",
+          "置信度高的点差异均 < 1 像素 —— 而算指标用的正是这些点。",
+          "60 Hz 采样下，1.3 px 平均差异对应约 1~3 mm，对角度指标可忽略。"
+        ]
+      }
+    },
+
+    "speed": {
+      "_comment": "CPU 上的数字。手机有 NPU/GPU，通常更快，但必须真机实测。",
+      "cpu_onnx_640_ms_per_frame": 22.7,
+      "cpu_onnx_960_ms_per_frame": 52.4,
+      "cpu_torch_640_ms_per_frame": 83.9,
+      "cpu_torch_960_ms_per_frame": 139.9,
+      "gpu_torch_ms_per_frame": null,
+      "estimated_1200_frames_s": {
+        "onnx_640": 27,
+        "onnx_960": 63
+      }
+    },
+
+    "known_issues": [
+      "蹲踞式起跑（各就位）时混淆手臂与腿 —— 衍生足部点会落到起跑器上，而所有关键点仍报告可见。教训：覆盖率不等于准确率。",
+      "COCO-17 没有脚跟与脚尖，足部点由小腿方向旋转 90° 几何推导，蹬离瞬间（踝背屈 120°+）误差最大。这是触地/腾空时间不可靠的根因。",
+      "模型有约 3 像素的关键点抖动，深层关节（踝）更明显。"
+    ],
+
+    "candidates_for_replacement": [
+      {
+        "name": "自采短跑素材微调版",
+        "why": "用带足部标注的短跑素材微调，可把足部点从'几何推导'变成'真实测量'，直接改善触地/腾空时间",
+        "requirement": "需要人工逐帧标注脚跟/脚尖；一段 10 秒 120fps 视频 = 1200 帧",
+        "export_path": "同样一条 yolo export 命令，输出格式不变，算法层零改动"
+      },
+      {
+        "name": "MediaPipe BlazePose",
+        "why": "自带脚跟与脚尖，且已有 Flutter 插件",
+        "cost": "输出 33 点而非 17 点，需要改 keypoint_map.py 的映射"
+      }
+    ]
+  }
+}

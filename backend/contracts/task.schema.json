@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://yucoach.local/contracts/task.schema.json",
+  "title": "AnalysisTask",
+  "description": "分析任务状态。stages 必须暴露，否则 90 秒的等待会让用户以为卡死。定义来源：docs/07-数据契约.md §9",
+  "type": "object",
+  "required": ["task_id", "session_id", "status", "stages"],
+  "additionalProperties": false,
+  "properties": {
+
+    "task_id": { "type": "string", "examples": ["tk_01HXYZ"] },
+
+    "session_id": { "type": "string" },
+
+    "analysis_id": { "type": ["string", "null"] },
+
+    "status": { "$ref": "common.schema.json#/$defs/TaskStatus" },
+
+    "stage": {
+      "type": ["string", "null"],
+      "description": "当前阶段名，与 stages[].name 对应"
+    },
+
+    "progress": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1
+    },
+
+    "stages": {
+      "type": "array",
+      "description": "分阶段进度。必须暴露全部阶段，让用户知道还要等多久，也让失败时能定位到具体阶段",
+      "items": { "$ref": "#/$defs/Stage" }
+    },
+
+    "error": {
+      "oneOf": [
+        { "$ref": "error.schema.json" },
+        { "type": "null" }
+      ]
+    },
+
+    "created_at": { "type": ["string", "null"], "format": "date-time" },
+    "finished_at": { "type": ["string", "null"], "format": "date-time" }
+  },
+
+  "$defs": {
+
+    "Stage": {
+      "type": "object",
+      "required": ["name", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "阶段名。与分析链路的顺序一致",
+          "enum": [
+            "decode",
+            "fps_verify",
+            "camera_motion",
+            "view_check",
+            "undistort",
+            "reference_scale",
+            "pose_estimation",
+            "smoothing",
+            "valid_window",
+            "events",
+            "phases",
+            "metrics",
+            "rules",
+            "report"
+          ]
+        },
+        "status": { "$ref": "common.schema.json#/$defs/StageStatus" },
+        "duration_ms": { "type": ["integer", "null"] },
+        "note": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

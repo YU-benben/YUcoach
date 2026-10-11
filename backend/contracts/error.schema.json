@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://yucoach.local/contracts/error.schema.json",
+  "title": "Error",
+  "description": "错误对象。suggestion 必填——失败时只显示'失败'是无用的。定义来源：docs/07-数据契约.md §2.2、§9",
+  "type": "object",
+  "required": ["code", "message", "suggestion", "recoverable"],
+  "additionalProperties": false,
+  "properties": {
+
+    "code": {
+      "type": "integer",
+      "description": "错误码。1xxx 认证权限 / 2xxx 参数 / 3xxx 资源状态 / 4xxx 业务拒绝 / 5xxx 服务异常",
+      "minimum": 1000,
+      "maximum": 5999
+    },
+
+    "message": {
+      "type": "string",
+      "description": "简短错误描述"
+    },
+
+    "detail": {
+      "type": ["string", "null"],
+      "description": "详细说明，用于解释具体发生了什么"
+    },
+
+    "suggestion": {
+      "type": "string",
+      "description": "给用户的可操作建议。必填，不得为空字符串。必须告诉用户下一步做什么"
+    },
+
+    "recoverable": {
+      "type": "boolean",
+      "description": "用户能否通过重试或调整输入解决。true 时界面应提供重试入口"
+    },
+
+    "action_required": {
+      "type": ["string", "null"],
+      "description": "需要用户执行的特定动作，界面据此弹出对应的交互",
+      "enum": [
+        "confirm_view",
+        "confirm_scale",
+        "select_shorter_clip",
+        "reupload",
+        "retry_later",
+        null
+      ]
+    }
+  },
+
+  "examples": [
+    {
+      "code": 4002,
+      "message": "帧率校验未通过",
+      "detail": "三种校验方法的偏差达 22%，超过 15% 的容忍上限",
+      "suggestion": "请确认视频为原始帧率导出，未经剪辑软件变速处理",
+      "recoverable": false,
+      "action_required": "reupload"
+    },
+    {
+      "code": 4003,
+      "message": "视角无法确认",
+      "detail": "用户声明为侧面视角，但检测到骨盆投影宽度接近肩宽，判断为正面或背面视角",
+      "suggestion": "请确认拍摄方位：镜头是正对运动员的侧面，还是正对前方/后方？",
+      "recoverable": true,
+      "action_required": "confirm_view"
+    }
+  ]
+}

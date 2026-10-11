@@ -1,0 +1,627 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://yucoach.local/contracts/common.schema.json",
+  "title": "Common Definitions",
+  "description": "全项目共用的枚举与对象定义。其他 Schema 通过 $ref 引用本文件。定义来源：docs/01-术语与命名规范.md",
+  "$defs": {
+    "View": {
+      "type": "string",
+      "enum": [
+        "side",
+        "front",
+        "back"
+      ],
+      "description": "拍摄视角。side=侧面(矢状面)，front=正面(额状面)，back=背面(额状面)"
+    },
+    "Phase": {
+      "type": "string",
+      "enum": [
+        "set",
+        "start",
+        "acceleration",
+        "transition",
+        "max_velocity",
+        "deceleration"
+      ],
+      "description": "运动阶段"
+    },
+    "Event": {
+      "type": "string",
+      "enum": [
+        "set_position",
+        "gun_fire",
+        "block_clearance",
+        "touchdown",
+        "midstance",
+        "toe_off",
+        "swing_peak",
+        "finish"
+      ],
+      "description": "瞬时事件"
+    },
+    "Side": {
+      "type": "string",
+      "enum": [
+        "L",
+        "R",
+        "both"
+      ],
+      "description": "运动员自身左右侧。注意：正/背视角下与画面左右相反"
+    },
+    "QualityCode": {
+      "type": "integer",
+      "enum": [
+        0,
+        1,
+        2
+      ],
+      "description": "关键点质量码。0=不可见(不绘制)，1=存疑，2=清晰"
+    },
+    "Reliability": {
+      "type": "string",
+      "enum": [
+        "A",
+        "B",
+        "C"
+      ],
+      "description": "方法学可靠性等级。C 级仅可用于趋势对比"
+    },
+    "Severity": {
+      "type": "string",
+      "enum": [
+        "major",
+        "minor",
+        "info",
+        "insufficient_data"
+      ],
+      "description": "结论严重度"
+    },
+    "InsufficientReason": {
+      "type": "string",
+      "enum": [
+        "low_frame_rate",
+        "view_mismatch",
+        "no_reference_scale",
+        "camera_motion",
+        "occlusion",
+        "missing_event",
+        "perspective_error",
+        "frame_rate_unverified",
+        "insufficient_samples",
+        "insufficient_cycles",
+        "no_athlete_height",
+        "implausible_value",
+        "contact_timing_unreliable",
+        "not_implemented"
+      ],
+      "description": "数据不足的原因。客户端应按此给出不同的补齐建议，不同原因对应的下一步动作完全不同。见 docs/07-数据契约.md §版本策略（新增枚举值属 Minor 变更，客户端须有 default 分支）"
+    },
+    "RefSource": {
+      "type": "string",
+      "enum": [
+        "literature",
+        "team",
+        "global"
+      ],
+      "description": "标准值来源层级。team 优先级最高"
+    },
+    "FpsVerifyStatus": {
+      "type": "string",
+      "enum": [
+        "verified",
+        "warning",
+        "rejected"
+      ],
+      "description": "帧率校验结论"
+    },
+    "CameraMotionLevel": {
+      "type": "string",
+      "enum": [
+        "fixed",
+        "slight_pan",
+        "strong_pan"
+      ],
+      "description": "镜头运动程度。strong_pan 会触发报告横幅提示"
+    },
+    "MeasurementWindow": {
+      "type": "string",
+      "enum": [
+        "valid",
+        "degraded",
+        "excluded"
+      ],
+      "description": "有效测量窗标记。excluded 的帧不参与计算"
+    },
+    "FindingBasis": {
+      "type": "string",
+      "enum": [
+        "normal",
+        "low_reliability",
+        "single_sample",
+        "extrapolated"
+      ],
+      "description": "结论的依据强度"
+    },
+    "TaskStatus": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "running",
+        "done",
+        "failed"
+      ],
+      "description": "任务状态"
+    },
+    "StageStatus": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "running",
+        "done",
+        "failed",
+        "skipped"
+      ],
+      "description": "单个分析阶段的状态"
+    },
+    "Gender": {
+      "type": "string",
+      "enum": [
+        "male",
+        "female"
+      ]
+    },
+    "AthleteLevel": {
+      "type": "string",
+      "enum": [
+        "elite",
+        "sub_elite",
+        "college",
+        "high_school",
+        "amateur"
+      ],
+      "description": "运动员水平。决定匹配哪一层标准值"
+    },
+    "TestType": {
+      "type": "string",
+      "enum": [
+        "block_start",
+        "acceleration",
+        "max_velocity",
+        "speed_endurance"
+      ],
+      "description": "测试类型"
+    },
+    "ReferenceScaleMethod": {
+      "type": "string",
+      "enum": [
+        "lane_line",
+        "height_derived",
+        "calibration_rod",
+        "none"
+      ],
+      "description": "参考尺度来源。lane_line 精度最高"
+    },
+    "Keypoint": {
+      "type": "object",
+      "description": "单个关键点。q=0 时 x/y 为 0，客户端不应绘制",
+      "required": [
+        "x",
+        "y",
+        "q"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "归一化横坐标，原点在画面左上角"
+        },
+        "y": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "归一化纵坐标，原点在画面左上角，向下为正"
+        },
+        "q": {
+          "$ref": "#/$defs/QualityCode"
+        }
+      }
+    },
+    "KeypointNames": {
+      "type": "array",
+      "description": "关键点名称列表。长度固定为 16，顺序不可变",
+      "minItems": 16,
+      "maxItems": 16,
+      "items": {
+        "type": "string"
+      }
+    },
+    "BBox": {
+      "type": "array",
+      "description": "人体包围框，归一化坐标 [x1, y1, x2, y2]",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      }
+    },
+    "ReferenceRange": {
+      "type": "object",
+      "description": "标准值区间。applicable_phase 与指标 phase 不符时，deviation 必须为 null",
+      "required": [
+        "source",
+        "applicable_phase",
+        "view",
+        "std_version"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "low": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "high": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "mean": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "sd": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "缺失时 deviation 必须为 null，不得用经验值补全"
+        },
+        "source": {
+          "$ref": "#/$defs/RefSource"
+        },
+        "applicable_phase": {
+          "$ref": "#/$defs/Phase"
+        },
+        "view": {
+          "$ref": "#/$defs/View"
+        },
+        "std_version": {
+          "type": "string"
+        }
+      }
+    },
+    "Aggregate": {
+      "type": "object",
+      "description": "同阶段多步次的统计量。单次采样不可用于判断，n 必须给出",
+      "required": [
+        "n"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "mean": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "sd": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "n": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "min": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "max": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      }
+    },
+    "InsufficientInfo": {
+      "type": "object",
+      "description": "数据不足的说明。三要素必须齐全：是什么、为什么、怎么办",
+      "required": [
+        "reason",
+        "required",
+        "actual",
+        "suggestion",
+        "impact"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "$ref": "#/$defs/InsufficientReason"
+        },
+        "required": {
+          "type": "string",
+          "description": "该指标需要什么条件"
+        },
+        "actual": {
+          "type": "string",
+          "description": "本次实际的条件"
+        },
+        "impact": {
+          "type": "array",
+          "description": "受影响的指标 ID 列表",
+          "items": {
+            "type": "string"
+          }
+        },
+        "suggestion": {
+          "type": "string",
+          "description": "给用户的可操作建议。必填，不得为空"
+        }
+      }
+    },
+    "Versions": {
+      "type": "object",
+      "description": "五套版本号中的四套（schema_version 在根级）。用于回答'为什么这次数据和上次不一样'",
+      "required": [
+        "algo_version",
+        "model_version",
+        "rule_version",
+        "std_version"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "algo_version": {
+          "type": "string"
+        },
+        "model_version": {
+          "type": "string"
+        },
+        "rule_version": {
+          "type": "string"
+        },
+        "std_version": {
+          "type": "string"
+        }
+      }
+    },
+    "Athlete": {
+      "type": "object",
+      "required": [
+        "athlete_id",
+        "name",
+        "gender",
+        "event",
+        "level"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "athlete_id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "gender": {
+          "$ref": "#/$defs/Gender"
+        },
+        "height_cm": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "用于归一化与逐帧参考尺度。缺失时相关指标不可用"
+        },
+        "weight_kg": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "event": {
+          "type": "string",
+          "examples": [
+            "100m"
+          ]
+        },
+        "level": {
+          "$ref": "#/$defs/AthleteLevel"
+        }
+      }
+    },
+    "FpsVerify": {
+      "type": "object",
+      "description": "帧率校验结果。三项方法交叉验证，至少两项一致方可继续",
+      "required": [
+        "methods",
+        "agreement_pct",
+        "status",
+        "method_results"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "methods": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "duration_check",
+              "cadence_backcalc",
+              "scale_displacement"
+            ]
+          }
+        },
+        "method_results": {
+          "type": "object",
+          "description": "每种方法的独立结果，键为方法名。值为 null 表示该方法本次无法得出结论（数据不足），这是正常情况而非错误：判定采信哪一项时需要知道哪些方法失效了",
+          "additionalProperties": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "agreement_pct": {
+          "type": "number",
+          "description": "各方法结果的最大偏差百分比"
+        },
+        "status": {
+          "$ref": "#/$defs/FpsVerifyStatus"
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "CameraMotion": {
+      "type": "object",
+      "description": "镜头运动检测结果。跟踪拍摄是本项目的前提，此结果影响多个指标的可用性",
+      "required": [
+        "level",
+        "is_tracking"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/CameraMotionLevel"
+        },
+        "is_tracking": {
+          "type": "boolean"
+        },
+        "detected_by": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "optical_flow",
+            "feature_match",
+            "manual",
+            null
+          ]
+        },
+        "mean_shift_px_per_frame": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "ReferenceScale": {
+      "type": "object",
+      "description": "参考尺度。跟踪拍摄下为逐帧变化，此处为汇总信息",
+      "required": [
+        "method",
+        "valid_per_frame"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "method": {
+          "$ref": "#/$defs/ReferenceScaleMethod"
+        },
+        "valid_per_frame": {
+          "type": "boolean",
+          "description": "尺度是否逐帧变化。跟踪拍摄下为 true"
+        },
+        "median_pixels_per_meter": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "为 null 时所有位移类指标返回 insufficient_data"
+        },
+        "reference_length_m": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "coverage_pct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "有参考尺度的帧占比"
+        },
+        "valid_region": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "x_min": {
+              "type": "number"
+            },
+            "x_max": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "x_min",
+            "x_max"
+          ]
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "TimeBase": {
+      "type": "object",
+      "description": "时间零点定义。毫秒值由帧号与 fps_verified 导出，不依赖容器时间戳",
+      "required": [
+        "origin_frame_index",
+        "origin_reference",
+        "unit"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "origin_frame_index": {
+          "type": "integer",
+          "description": "时间零点的帧号。帧编号不一定从 0 开始（视频可能被裁剪）"
+        },
+        "origin_reference": {
+          "$ref": "#/$defs/Event"
+        },
+        "unit": {
+          "type": "string",
+          "enum": [
+            "ms"
+          ]
+        }
+      }
+    },
+    "Confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "数值可信程度。与 reliable 是两个不同问题，不可互推"
+    }
+  }
+}
