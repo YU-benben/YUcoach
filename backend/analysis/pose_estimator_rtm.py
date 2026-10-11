@@ -250,45 +250,60 @@ class RtmPoseEstimator(PoseEstimator):
         """
         从多人里选一个，返回其索引；都不合格时返回 None。
 
-        依据：**躯干像素高度最大** —— 即「肩中点 → 髋中点」的垂直距离。
+        ## 判据：核心关节置信度最高
 
-        为什么不用关键点包围盒：
-            · 远侧的人可能有更宽的框（手臂张开），但离镜头更远、更矮
-            · 包围盒还受检出的四肢外扩影响，抖动大
-            躯干高度直接反映"离镜头多近"，且对姿态变化不敏感。
+        核心关节 = 双肩 + 双髋 + 双膝 + 双踝。
 
-        为什么不直接用检测框面积（像 YoloPoseEstimator 那样）：
-            rtmlib 不返回框，没有这个信息可用。
+        ## ⚠️ 为什么不用"躯干像素高度最大"（曾经的做法，已废弃）
+
+        目视核对（docs/14 §9.7）发现：在真实素材上选错了人 ——
+        关键点浮在半空中，不在任何人的脚上。
+
+        原因是**躯干高度不能代表"离镜头近"**：
+          · 远处站立行走的行人，躯干在画面里可能比近处蹲踞的
+            运动员还长（蹲踞时躯干被透视压缩）
+          · 结果是选中了背景里的行人
+
+        也不能用包围盒面积：rtmlib 根本不返回人体框。
+
+        置信度则是"模型自己认为像不像人"的直接信号 ——
+        远处的小人、模糊的人、半个人，分数天然更低。
+        实测在样例素材上明显更稳。
+
+        ## 退回策略
+
+        核心关节都不可信时，退回"全部 26 点里置信度最高的人"，
+        而不是返回 None —— 否则低质量素材会整段没有姿态数据，
+        上层看不出是"检出质量差"还是"根本没有素材"。
         """
         if kp.ndim != 3 or kp.shape[0] == 0:
             return None
 
-        best_idx: int | None = None
-        best_height = 0.0
+        #: 核心关节索引。肩/髋/膝/踝各一对，缺一个都算不上一个人。
+        core = (5, 6, 11, 12, 13, 14, 15, 16)
+        n = kp.shape[0]
 
-        for i in range(kp.shape[0]):
-            ls, rs = kp[i, 5], kp[i, 6]
-            lh, rh = kp[i, 11], kp[i, 12]
-            # 四个点都要够可信才算得出躯干
+        # 每人的核心关节分数：取**最大值**而不是中位数。
+        # 中位数会让"六个数都低"和"六个数都高"的人难以区分，
+        # 而最大值直接反映"这个人的关节有多可信"。
+        core_score = np.array(
+            [float(sc[i, list(core)].max()) for i in range(n)]
+        )
+
+        order = np.argsort(-core_score)          # 从高到低
+        for i in order:
+            if core_score[i] < min_conf:
+                break
+            # 躯干四点齐全才算合格（否则算不出躯干，后面也用不了）
             if min(sc[i, 5], sc[i, 6], sc[i, 11], sc[i, 12]) < min_conf:
                 continue
-            shoulder_y = (ls[1] + rs[1]) / 2.0
-            hip_y = (lh[1] + rh[1]) / 2.0
-            torso = abs(hip_y - shoulder_y)
-            if torso > best_height:
-                best_height = torso
-                best_idx = i
+            return int(i)
 
-        # 一个人都没过阈值时，退回"置信度总和最高"的那个，
-        # 而不是返回 None —— 否则低质量素材会整段没有姿态数据，
-        # 上层反而看不出是"检出质量差"还是"没有素材"。
-        if best_idx is None:
-            totals = sc.sum(axis=1)
-            if totals.size and float(totals.max()) > 0:
-                return int(np.argmax(totals))
-            return None
-
-        return best_idx
+        # 退回：全部点的置信度总和最高者
+        totals = sc.sum(axis=1)
+        if totals.size and float(totals.max()) > 0:
+            return int(np.argmax(totals))
+        return None
 
     # ------------------------------------------------------------------
 

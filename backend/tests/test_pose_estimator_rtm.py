@@ -275,3 +275,94 @@ def test_frame_index_and_person_conf_passed_through():
     out = halpe26_to_yu16(make_halpe(), frame_index=137, person_conf=0.66)
     assert out.frame_index == 137
     assert out.person_conf == pytest.approx(0.66)
+
+
+# ---------------------------------------------------------------------------
+# 选人逻辑
+# ---------------------------------------------------------------------------
+#
+# 这一段锁定一个目视核对才发现的真实缺陷（docs/14 §9.7）：
+#   最初用"躯干像素高度最大"选人，结果在真实素材上选中了背景里的行人 ——
+#   关键点浮在半空中，不在任何人的脚上。
+#
+#   原因：躯干高度不能代表"离镜头近"。远处站立行走的行人，
+#   躯干在画面里可能比近处蹲踞的运动员还长（蹲踞时躯干被透视压缩）。
+#
+# 改成"核心关节置信度最高"后，目视确认真实素材上选对了人。
+
+def _two_people() -> tuple[np.ndarray, np.ndarray]:
+    """
+    造两个人：
+      · 人0：躯干**更高**（像素），但置信度**低** —— 模拟背景里的模糊行人
+      · 人1：躯干**更矮**，但置信度**高** —— 模拟近处的主体
+
+    正确的选择是**人1**。
+    """
+    kp = np.zeros((2, 26, 3), dtype=np.float64)
+    sc = np.zeros((2, 26), dtype=np.float64)
+
+    # 人0：肩 y=0.20，髋 y=0.60 → 躯干 0.40（高），但 conf 0.30
+    for i in range(26):
+        kp[0, i] = (0.30, 0.20 + i * 0.001, 0.30)
+    kp[0, 5] = (0.28, 0.20, 0.30)
+    kp[0, 6] = (0.32, 0.20, 0.30)
+    kp[0, 11] = (0.28, 0.60, 0.30)
+    kp[0, 12] = (0.32, 0.60, 0.30)
+    sc[0, :] = 0.30
+
+    # 人1：肩 y=0.45，髋 y=0.55 → 躯干 0.10（矮），但 conf 0.90
+    for i in range(26):
+        kp[1, i] = (0.60, 0.45 + i * 0.001, 0.90)
+    kp[1, 5] = (0.58, 0.45, 0.90)
+    kp[1, 6] = (0.62, 0.45, 0.90)
+    kp[1, 11] = (0.58, 0.55, 0.90)
+    kp[1, 12] = (0.62, 0.55, 0.90)
+    sc[1, :] = 0.90
+
+    return kp, sc
+
+
+def test_pick_person_prefers_confident_over_tall():
+    """
+    选人应挑"置信度高"的，而不是"躯干高"的。
+
+    这是真实缺陷的回归测试：用躯干高度会选中背景里的行人。
+    """
+    from backend.analysis.pose_estimator_rtm import RtmPoseEstimator
+
+    kp, sc = _two_people()
+    pick = RtmPoseEstimator._pick_person(kp, sc)
+    assert pick == 1, "应选中置信度高的人1，而不是躯干高的人0"
+
+
+def test_pick_person_skips_incomplete_torso():
+    """躯干四点不全（低于阈值）的人应被跳过。"""
+    from backend.analysis.pose_estimator_rtm import RtmPoseEstimator
+
+    kp, sc = _two_people()
+    # 人1 的颈肩点被抹掉 → 应退回人0
+    sc[1, 5] = 0.05
+    sc[1, 11] = 0.05
+    pick = RtmPoseEstimator._pick_person(kp, sc)
+    assert pick == 0
+
+
+def test_pick_person_falls_back_when_all_low_confidence():
+    """
+    所有人都不过阈值时，退回"置信度总和最高"的那个，
+    而不是返回 None —— 否则低质量素材会整段没有姿态数据。
+    """
+    from backend.analysis.pose_estimator_rtm import RtmPoseEstimator
+
+    kp, sc = _two_people()
+    sc[:] = 0.05                     # 全员低于 0.25
+    sc[0, :] = 0.10                  # 人0 总和略高
+    pick = RtmPoseEstimator._pick_person(kp, sc)
+    assert pick == 0
+
+
+def test_pick_person_handles_empty():
+    """没有人时返回 None，不该崩。"""
+    from backend.analysis.pose_estimator_rtm import RtmPoseEstimator
+
+    assert RtmPoseEstimator._pick_person(np.zeros((0, 26, 2)), np.zeros((0, 26))) is None
