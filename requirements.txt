@@ -24,17 +24,21 @@ opencv-contrib-python==5.0.0.93
 
 # onnxruntime：装了 GPU 版就不要再装 CPU 版，两者互斥（同一个 import 名）。
 #
-# 当前装的是 onnxruntime-gpu（为了 rtmlib 的 device='cuda'）。
-# ⚠️ 但它对 CUDA 版本有要求：1.31 要 CUDA 13 + cuDNN 9，
-#    而本机 torch 是 CUDA 12.6 前缀 —— 所以 CUDA provider **创建失败、
-#    静默退回 CPU**（只在日志里报一句）。见 docs/14 §9.4。
+# ⚠️ 版本必须与 CUDA 匹配，否则 CUDA provider **创建失败并静默退回 CPU**
+#    （只在日志里报一句，表现为"分析莫名其妙很慢"）：
 #
-#    也就是说：现在装 onnxruntime-gpu 与装 CPU 版的效果一样。
-#    将来装了 CUDA 13 运行库后 GPU 才会真正生效。
+#        onnxruntime-gpu 1.31  要 CUDA 13 + cuDNN 9   ❌ 本机是 CUDA 12.6
+#        onnxruntime-gpu 1.22  要 CUDA 12 + cuDNN 9   ✅ 用这个
 #
-#    重建时若想省事，装 onnxruntime（CPU 版）即可：
-#        .\.venv\Scripts\python.exe -m pip install onnxruntime==1.31.0
-onnxruntime-gpu==1.31.0
+# ✅ 不需要单独安装 CUDA Toolkit —— **torch 自带 CUDA 运行库**
+#    （cublasLt64_12.dll / cudnn64_9.dll 等，在 torch/lib 下）。
+#    代码里已把 torch/lib 前置到 DLL 搜索路径，
+#    见 backend/analysis/pose_estimator_rtm.py 的 _prepare_cuda_dlls()。
+#    详见 docs/14 §9.4。
+#
+#    想省事也可以装 CPU 版（rtm 会慢约 4 倍，45 秒 vs 12 秒）：
+#        .\.venv\Scripts\python.exe -m pip install onnxruntime==1.22.0
+onnxruntime-gpu==1.22.0
 
 # ---- 数值与图像 ----
 numpy==2.5.4

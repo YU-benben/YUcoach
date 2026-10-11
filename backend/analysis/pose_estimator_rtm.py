@@ -32,6 +32,7 @@ Halpe26 骨干**直接输出趾尖与足跟**，从根本上解决这个问题�
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import numpy as np
@@ -61,27 +62,29 @@ class RtmPoseEstimator(PoseEstimator):
            要精度时再显式传 'balanced'。
 
            端到端实测（332 帧素材）：
-               yolo（GPU）            7.9 秒
-               rtm lightweight       45.6 秒
-               rtm balanced         214.8 秒
+               yolo（torch CUDA）              7.9 秒
+               rtm lightweight（onnxruntime CUDA） 11.9 秒
+               rtm lightweight（退回 CPU）      45.6 秒
+               rtm balanced（退回 CPU）        214.8 秒
 
     device : 'cpu' | 'cuda' | None（自动）
              ⚠️ rtmlib 的 device 语义与 torch 不同：
                 'cpu' / 'cuda' 是**计算设备**，不是后端。
-             ⚠️ 'cuda' 需要 onnxruntime-gpu，且它对 CUDA 版本有要求。
-                本机实测：onnxruntime-gpu 1.31 要 **CUDA 13 + cuDNN 9**，
-                而 torch 装的是 CUDA 12.6 前缀 —— 所以即使
-                `get_available_providers()` 里列出了 CUDA，
-                实际创建 provider 时也会失败并**静默退回 CPU**：
+             ⚠️ 'cuda' 需要 onnxruntime-gpu，且**版本要与 CUDA 匹配**：
 
-                    Failed to create CUDAExecutionProvider.
-                    Require cuDNN 9.* and CUDA 13.*
+                onnxruntime-gpu 1.31  要 CUDA 13  ❌ 本机是 CUDA 12.6
+                onnxruntime-gpu 1.22  要 CUDA 12  ✅
 
-                这一点很坑：provider 列表里有 CUDA ≠ 能用。
-                所以判断不能只看列表，要真跑一次看日志。
-                目前结论：**rtm 提取器实际跑在 CPU 上**。
-                对有 GPU 版 torch 的 YOLO 路径没有影响（两者互不相干）。
+                本机没装 CUDA Toolkit，但 **torch 自带 CUDA 运行库** ——
+                代码里已把 torch/lib 前置到 DLL 搜索路径（见
+                _prepare_cuda_dlls），所以**不需要单独装 CUDA Toolkit**。
+
+                判断 provider 能否用的唯一可信方式是真建一个
+                InferenceSession 看 get_providers()；
+                get_available_providers() 只检查 DLL 能否加载，会误导。
     backend : 'onnxruntime' | 'openvino' | 'opencv'
+             ⚠️ 'opencv' 后端要走 GPU 需自己编译带 CUDA 的 OpenCV
+                （现在装的是 CPU 构建，cv2.cuda 设备数为 0）。不值得。
     """
 
     name = "rtmpose-halpe26"
@@ -107,6 +110,12 @@ class RtmPoseEstimator(PoseEstimator):
         self.backend = backend
         self.verbose = verbose
 
+        # ⚠️ 必须在 import onnxruntime 之前把 torch 的 CUDA DLL 加进搜索路径，
+        #    否则 provider 创建失败并静默退回 CPU。理由见 _prepare_cuda_dlls。
+        self.cuda_dll_dir = None
+        if backend == "onnxruntime" and device != "cpu":
+            self.cuda_dll_dir = self._prepare_cuda_dlls()
+
         if device is None:
             device = self._detect_device(backend)
         self.device = device
@@ -121,15 +130,66 @@ class RtmPoseEstimator(PoseEstimator):
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _prepare_cuda_dlls() -> str | None:
+        """
+        把 torch 自带的 CUDA 运行库借给 onnxruntime。
+
+        ## 为什么需要这一步
+
+        onnxruntime-gpu 需要 cuBLAS / cuDNN 等 **CUDA 运行库**，
+        而本机没装 CUDA Toolkit。但 **torch 自带这些 DLL** ——
+        它们在 `.venv/Lib/site-packages/torch/lib/` 下。
+
+        Windows 加载器不会自动去那里找，于是 onnxruntime 找不到
+        `cublasLt64_12.dll`，创建 CUDA provider 失败并**静默退回 CPU**：
+
+            Failed to create CUDAExecutionProvider.
+            Require cuDNN 9.* and CUDA 12.*
+
+        实测（见 docs/14 §9.4）：只要把 torch/lib 前置到 PATH，
+        provider 就能正常创建 —— **不需要单独安装 CUDA Toolkit**。
+
+        ## ⚠️ 判断 provider 能不能用的唯一可信方式
+
+        **不要用 `ort.get_available_providers()`。**
+        它只检查 DLL 能否**加载**，不代表 provider 能**创建**。
+        实测：它列出了 `CUDAExecutionProvider`，但会话实际建在 CPU 上。
+        这个区别会让人以为 GPU 生效了。
+
+        返回
+        ----
+        实际加进去的目录路径；不需要或失败时返回 None。
+        """
+        try:
+            import torch
+            torch_lib = Path(torch.__file__).parent / "lib"
+            if not torch_lib.is_dir():
+                return None
+            # 前置到 PATH（而不是 append）—— 要优先于系统里可能存在的旧版本
+            os.environ["PATH"] = (
+                str(torch_lib) + os.pathsep + os.environ.get("PATH", "")
+            )
+            # 再加一次 DLL 目录。两种方式都做，因为它们在不同
+            # Windows 版本 / Python 版本上的可靠性不同。
+            if hasattr(os, "add_dll_directory"):
+                try:
+                    os.add_dll_directory(str(torch_lib))
+                except Exception:
+                    pass
+            return str(torch_lib)
+        except Exception:
+            return None
+
+    @staticmethod
     def _detect_device(backend: str) -> str:
         """
         自动挑计算设备。
 
         为什么必须探测而不是写死 'cuda'：
             没装 onnxruntime-gpu 时，传 'cuda' 给 rtmlib 不一定报错 ——
-            可能静默退回 CPU。而 CPU 比 GPU 慢约 80 倍，
-            表现为"分析卡住"，很难联想到是 provider 缺失。
-            所以这里先查 provider 列表，再决定传什么。
+            可能静默退回 CPU。而 CPU 慢得多（实测 lightweight 模式
+            45 秒 vs GPU 预计数秒），表现为"分析很慢"，
+            很难联想到是 provider 缺失。
         """
         if backend != "onnxruntime":
             # openvino / opencv 后端各有自己的设备名，不在这里猜
