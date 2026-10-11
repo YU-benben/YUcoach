@@ -47,6 +47,35 @@ from .video_io import estimate_camera_motion, iter_frames, read_video_info
 ProgressFn = Callable[[float, str], None]
 
 
+def _build_estimator(which: str, model_name: str, imgsz: int):
+    """
+    按名字构造姿态提取器。
+
+    为什么要有这一层：姿态模型是本项目最可能被替换的一环
+    （见 pose_types.PoseEstimator 的说明）。集中在一处选择，
+    将来加新模型只改这里的表，不动主管线。
+
+    ⚠️ 默认仍是 'yolo'。换模型会改变数值结果，
+       所以必须**显式指定** —— 不能让历史报告的数字被静默改变。
+
+    可选值
+    ------
+    'yolo' : YOLOv8-pose，COCO-17，**无足部点**（由几何推导）
+    'rtm'  : rtmlib 的 RTMPose + Halpe26，**含实测足部点**
+    """
+    if which in ("yolo", "yolov8", "yolov8-pose"):
+        return YoloPoseEstimator(model_name=model_name, imgsz=imgsz)
+    if which in ("rtm", "rtmpose", "halpe26"):
+        # 延迟导入：rtmlib 是换模型时的可选依赖，
+        # 没装也不该影响默认路径（否则整个引擎都起不来）。
+        from .pose_estimator_rtm import RtmPoseEstimator
+        return RtmPoseEstimator()
+    raise ValueError(
+        f"未知的姿态提取器 '{which}'。可选：yolo（默认，无足部点）、"
+        f"rtm（rtmlib Halpe26，含足部点）。"
+    )
+
+
 def run_pipeline(
     video_path: Path,
     *,
@@ -66,6 +95,7 @@ def run_pipeline(
     team_id: str = "t_local",
     model_name: str = "yolov8n-pose.pt",
     imgsz: int = 960,
+    estimator: str = "yolo",
     max_frames: int | None = None,
     keyframe_dir: Path | str | None = None,
     keyframe_url_prefix: str = "keyframes",
@@ -115,8 +145,10 @@ def run_pipeline(
 
     # ---- 3. 姿态提取（耗时最长，占整体 90% 以上）----
     emit(0.12, "加载姿态模型")
-    est = YoloPoseEstimator(model_name=model_name, imgsz=imgsz)
-    say(f"推理设备 {est.device}")
+    est = _build_estimator(estimator, model_name, imgsz)
+    say(f"姿态提取器 {est.name}，推理设备 {getattr(est, 'device', '?')}")
+    if est.provides_foot_keypoints:
+        say("该模型提供实测足部关键点（heel/toe 不再几何推导）")
 
     frames_iter = iter_frames(
         p, end=None if max_frames is None else max_frames)
@@ -232,6 +264,12 @@ def main() -> int:
     ap.add_argument("--out", type=Path, default=Path("output"))
     ap.add_argument("--model", default="yolov8n-pose.pt")
     ap.add_argument("--imgsz", type=int, default=960)
+    ap.add_argument(
+        "--estimator", default="yolo",
+        choices=["yolo", "rtm"],
+        help="姿态提取器。yolo=YOLOv8-pose（无足部点，默认）；"
+             "rtm=rtmlib Halpe26（含实测趾尖/足跟，换它会改变数值结果）",
+    )
     ap.add_argument("--max-frames", type=int, default=None)
 
     ap.add_argument("--athlete-id", default="at_local")
@@ -304,6 +342,7 @@ def main() -> int:
             team_id=args.team_id,
             model_name=args.model,
             imgsz=args.imgsz,
+            estimator=args.estimator,
             max_frames=args.max_frames,
             progress=on_progress,
             log=lambda s: out(f"        {s}"),

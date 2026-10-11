@@ -310,6 +310,114 @@ def derive_foot_points(
     return heel, toe
 
 
+# ---------------------------------------------------------------------------
+# Halpe26 -> yu16
+# ---------------------------------------------------------------------------
+#
+# 为什么需要这一层：
+#     COCO-17 没有足部点，heel/toe 只能几何推导；而推导假定"足部与小腿呈 90°"，
+#     蹬离期实际可达 120° 以上 —— 误差正好落在最关键的触地/离地时刻。
+#
+#     RTMPose 的 Halpe26 骨干**直接输出趾尖与足跟**，从根本上解决这个问题。
+#
+# ⚠️ 索引来源与核实方式（2026-10-11）：
+#     1. 名称顺序取自 rtmlib 自带的骨架定义
+#        `rtmlib/visualization/skeleton/halpe26.py`
+#     2. 用真实权重在同一帧上逐点打印坐标，确认语义正确
+#        （核实记录见 docs/14 §2）
+#
+#     两步都做过。**不要凭 Halpe 论文的索引顺序改这张表** ——
+#     rtmlib 的实现与论文表格的排列并不相同（例如 [19] 是髋中心，
+#     而不是某些资料里以为的足部点起点）。
+HALPE26_NAMES: tuple[str, ...] = (
+    "nose", "left_eye", "right_eye", "left_ear", "right_ear",
+    "left_shoulder", "right_shoulder", "left_elbow", "right_elbow",
+    "left_wrist", "right_wrist", "left_hip", "right_hip",
+    "left_knee", "right_knee", "left_ankle", "right_ankle",
+    "head", "neck", "hip",
+    "left_big_toe", "right_big_toe", "left_small_toe", "right_small_toe",
+    "left_heel", "right_heel",
+)
+
+#: Halpe26 -> yu16 的直接映射。None = 需推导（本表里只剩 shoulder_center）。
+_HALPE_TO_YU: dict[str, int | None] = {
+    "head": 17,             # Halpe 直接给头部中心（COCO-17 要靠外推）
+    "neck": 18,             # 直接给颈根（COCO-17 要靠双肩中点）
+    "shoulder_r": 6,
+    "hip_r": 12,
+    "knee_r": 14,
+    "ankle_r": 16,
+    "heel_r": 25,           # ✅ 实测值，不再推导
+    "toe_r": 21,            # 大趾。严格说"趾尖最前端"还要再前一点，
+                            # 但大趾末端已足够定位触地/离地时刻
+    "shoulder_l": 5,
+    "hip_l": 11,
+    "knee_l": 13,
+    "ankle_l": 15,
+    "heel_l": 24,           # ✅ 实测值
+    "toe_l": 20,
+    "pelvis_center": 19,    # Halpe 的 "hip" = 髋中心，比双髋中点更接近解剖位置
+    "shoulder_center": None,  # Halpe 不提供，仍需双肩中点
+}
+
+
+def halpe26_to_yu16(
+    halpe_kps: np.ndarray,
+    frame_index: int,
+    person_conf: float | None = None,
+    bbox: tuple[float, float, float, float] | None = None,
+) -> PoseFrame:
+    """
+    把 Halpe26 关键点转成契约的 16 点。
+
+    参数
+    ----
+    halpe_kps : 形状 (26, 3)，每行 [x, y, conf]，坐标为归一化值
+    bbox : 归一化的 (x1, y1, x2, y2)，仅用于记录
+
+    与 coco17_to_yu16 的关键差别
+    ---------------------------
+    · **足部点是实测的**，质量码可达 Q_CLEAR；
+      has_derived_keypoints 恒为 False（没有推导点）。
+    · head / neck / pelvis_center 也是实测量，不再依赖启发式外推。
+
+    唯一仍需计算的是 shoulder_center（双肩中点）—— 但那是
+    **由两个实测量求中点**，不是几何假设，所以不记为"推导点"。
+    """
+    out = np.zeros((len(KEYPOINT_NAMES), 3), dtype=np.float64)
+
+    for name, idx in _HALPE_TO_YU.items():
+        if idx is None:
+            continue
+        yu_idx = KEYPOINT_NAMES.index(name)
+        x, y, conf = halpe_kps[idx]
+        if conf >= CONF_INVISIBLE and not (x == 0 and y == 0):
+            out[yu_idx] = [x, y, _quality(conf)]
+
+    # shoulder_center：双肩中点
+    ls, rs = halpe_kps[5], halpe_kps[6]
+    if ls[2] >= CONF_INVISIBLE and rs[2] >= CONF_INVISIBLE:
+        out[KEYPOINT_NAMES.index("shoulder_center")] = [
+            (ls[0] + rs[0]) / 2,
+            (ls[1] + rs[1]) / 2,
+            _quality(min(ls[2], rs[2])),
+        ]
+
+    out[:, 0] = np.clip(out[:, 0], 0.0, 1.0)
+    out[:, 1] = np.clip(out[:, 1], 0.0, 1.0)
+    invisible = out[:, 2] == 0
+    out[invisible, 0] = 0.0
+    out[invisible, 1] = 0.0
+
+    return PoseFrame(
+        frame_index=frame_index,
+        keypoints=out,
+        person_conf=person_conf,
+        bbox=bbox,
+        has_derived_keypoints=False,   # 足部点是实测的
+    )
+
+
 def resolve_side_convention(view: str, runner_moves_right: bool) -> bool:
     """
     判断是否需要交换左右标签。
