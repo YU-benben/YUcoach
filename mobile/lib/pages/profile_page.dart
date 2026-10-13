@@ -5,7 +5,6 @@ import '../data/theme_service.dart';
 import '../domain/local_user.dart';
 import '../widgets/user_avatar.dart';
 import 'membership_page.dart';
-import 'pose_recognition_page.dart';
 import 'profile_edit_page.dart';
 import 'server_settings_page.dart';
 import 'training_plan_page.dart';
@@ -105,17 +104,6 @@ class _ProfilePageState extends State<ProfilePage> {
           // 以为这是会员权益 —— 用户不敢点，或者点了以为要付费。
           // 归类会改变用户对功能的预期，这不只是排版问题。
           _SectionTitle('训练'),
-          _NavTile(
-            icon: Icons.accessibility_new_outlined,
-            title: '姿态识别',
-            subtitle: '在手机上提取骨骼关键点，出骨架图与关键帧',
-            badge: '离线',
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const PoseRecognitionPage(),
-              ),
-            ),
-          ),
           _NavTile(
             icon: Icons.calendar_month_outlined,
             title: '训练计划',

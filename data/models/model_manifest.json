@@ -31,7 +31,7 @@
         "input_size": 640,
         "opset": 12,
         "dynamic": false,
-        "used_by": "手机端推理（计划中）",
+        "used_by": "仅用于对拍（手机端推理已于 2026-10-11 移除）",
         "export_command": "yolo export model=yolov8n-pose.pt format=onnx imgsz=640 opset=12 simplify=True dynamic=False"
       },
       "onnx_960": {

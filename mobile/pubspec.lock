@@ -304,13 +304,6 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "9.6.2"
-  onnxruntime:
-    dependency: "direct main"
-    description:
-      path: "third_party/onnxruntime"
-      relative: true
-    source: path
-    version: "1.4.1"
   package_config:
     dependency: transitive
     description:

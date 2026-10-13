@@ -59,8 +59,6 @@ dependencies:
   #   慢动作素材常有几百 MB，整块读进内存会在手机上触发 OOM。
   #   http 包支持流式请求体，配合文件流可以做到内存占用与文件大小无关。
   http: ^1.2.2
-  onnxruntime:
-    path: third_party/onnxruntime
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -92,15 +90,10 @@ flutter:
     # 图标（桌面图标/启动图标）不走这里 —— 那些由平台资源提供，
     # 见 scripts/gen_icons.py。
     - assets/branding/
-    # 姿态模型（ONNX）。
-    #
-    # ⚠️ 打包进 APK 而不是运行时下载，是刻意的：
-    #    「随时随地能用」是核心目标，而下载就需要网络 ——
-    #    训练场信号常常很差。
-    #
-    # 代价：换模型必须重新编译 APK，不能像电脑端那样直接换文件。
-    # 这个取舍记在 data/models/model_manifest.json 里。
-    - assets/models/
+    # 注：手机端姿态模型（assets/models/）已于 2026-10-11 随「姿态识别」
+    # 功能一并移除。骨架提取现在只在电脑端做（backend/analysis/
+    # pose_estimator*.py），App 只负责上传与展示报告。
+    # 取舍记录见 data/models/model_manifest.json。
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
