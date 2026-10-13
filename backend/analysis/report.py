@@ -33,12 +33,42 @@ from .video_io import VideoInfo
 SCHEMA_VERSION = "1.1.0"
 
 # 分析引擎各组件版本。写入报告用于回答"为什么这次和上次不一样"。
+#
+# ⚠️ model_version **不在这里**：它必须来自实际跑的提取器。
+#
+#    这里曾经硬编码 "yolov8n-pose"，于是用 --estimator rtm 跑分析时，
+#    报告里仍然写着 yolov8n-pose —— **谎报了用了哪个模型**。
+#    这直接违反 P12（一切版本化）：这个字段存在的意义就是
+#    "回答为什么这次和上次不一样"，报错的版本号等于回答不了。
+#
+#    现在由 build_versions() 从 inp.seq 取（PoseSequence 本来就带着
+#    estimator_name / estimator_version，信息一直在手边）。
 VERSIONS = {
     "algo_version": "0.2.0",
-    "model_version": "yolov8n-pose",
     "rule_version": "0.1.0",
     "std_version": "0.1.0",
 }
+
+
+def build_versions(seq: PoseSequence) -> dict[str, str]:
+    """
+    组装写入报告的版本信息。
+
+    model_version 取**实际使用的姿态提取器**，而不是常量 ——
+    换模型后报告必须如实反映，否则历史报告与新报告无法区分。
+    """
+    name = (getattr(seq, "estimator_name", "") or "").strip()
+    ver = (getattr(seq, "estimator_version", "") or "").strip()
+    if name and ver:
+        model_version = f"{name} {ver}"
+    elif name:
+        model_version = name
+    else:
+        # 没记录提取器（例如手工构造的 PoseSequence）——
+        # 如实写 unknown，不冒充某个具体模型。
+        model_version = "unknown"
+
+    return {**VERSIONS, "model_version": model_version}
 
 
 @dataclass
@@ -447,7 +477,7 @@ def build_report(
         "schema_version": SCHEMA_VERSION,
         "analysis_id": analysis_id,
         "session": session,
-        "versions": VERSIONS,
+        "versions": build_versions(inp.seq),
         "quality_score": quality,
         "phases_detected": build_phases(inp.phases),
         "metrics": build_metrics(results, ctx),

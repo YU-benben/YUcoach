@@ -44,6 +44,7 @@ import argparse
 import io
 import json
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -916,7 +917,7 @@ def cleanup_stale_uploads() -> int:
     return removed
 
 
-def check_firewall(port: int) -> list[str]:
+def check_firewall(port: int) -> str:
     """
     启动时检查防火墙是否放行了本端口。
 
@@ -939,29 +940,55 @@ def check_firewall(port: int) -> list[str]:
        再对端口号做子串匹配 —— 结果是"规则明明存在却报没有"。
        现在按字段逐条解析，并精确比对端口。
 
-    只用标准库（netsh 在所有 Windows 上都有，且读取规则无需管理员权限），
-    失败时静默返回空列表 —— 这个检查本身不该成为服务启动的障碍。
+    只用标准库（netsh 在所有 Windows 上都有；调用开销远小于 PowerShell，
+    这是服务启动路径，不该慢）。
+
+    ⚠️ 返回值是**三态字符串**，不是布尔 —— 因为"不知道"是一种真实状态：
+
+        "allowed"  —— 确认有规则放行
+        "blocked"  —— 确认没有规则放行（此时才该提示用户去修）
+        "unknown"  —— 查不了（权限不足等），**不下结论**
+
+    为什么第一版会误报（真实踩过的坑）：
+        读取规则的 `netsh advfirewall firewall show rule`
+        **需要管理员权限**。服务以普通用户启动时，netsh 返回
+        returncode=1、stdout="Access is denied."，解析不到任何规则，
+        于是报"防火墙没有放行" —— **而规则好好地在那儿**。
+
+        代价很大：用户被引去跑一条 New-NetFirewallRule，
+        而真正的原因是手机热点的 AP 隔离。**误报比不报更糟**，
+        因为它把排查方向带偏了。
+
+        所以现在：**读不到规则就说"不知道"，绝不猜。**
     """
     try:
-        import subprocess
-
-        out = subprocess.run(
+        proc = subprocess.run(
             ["netsh", "advfirewall", "firewall", "show", "rule",
              "name=all"],
             capture_output=True, text=True, encoding="gbk",
             errors="replace", timeout=60,
-        ).stdout
+        )
+        out = proc.stdout
+
+        # 权限不足的两种表现：非零返回码，或正文里明确说拒绝访问。
+        # 命中任一即判"不知道"，不做任何猜测。
+        if proc.returncode != 0:
+            return "unknown"
+        if "Access is denied" in out or "拒绝访问" in out:
+            return "unknown"
 
         # 逐条规则解析。
         # 字段名在中文系统上仍是英文（Enabled/Direction/LocalPort/Action），
         # 只有"规则名"是用户填的内容 —— 所以按字段名解析是安全的。
         current: dict[str, str] = {}
         exact = 0
+        saw_any_rule = False
 
         for raw in out.splitlines():
             line = raw.rstrip()
             if not line:
                 if current:
+                    saw_any_rule = True
                     if _allows_port(current, port):
                         exact += 1
                     current = {}
@@ -974,22 +1001,39 @@ def check_firewall(port: int) -> list[str]:
             key, _, value = line.partition(":")
             current[key.strip()] = value.strip()
 
-        if current and _allows_port(current, port):
-            exact += 1
+        if current:
+            saw_any_rule = True
+            if _allows_port(current, port):
+                exact += 1
 
         if exact:
-            return []
-
-        return [
-            f"防火墙没有放行 TCP {port} —— 手机连接会一直超时。",
-            "以管理员身份运行一次即可修复：",
-            f'  New-NetFirewallRule -DisplayName "YUcoach (TCP {port})" '
-            f"-Direction Inbound -Protocol TCP -LocalPort {port} "
-            f"-Action Allow -Profile Any",
-        ]
+            return "allowed"
+        # 解析到规则了，但其中没有放行本端口的 → 这个结论可信
+        if saw_any_rule:
+            return "blocked"
+        # 一条规则都没解析出来 → 多半是输出格式变了或被截断，不下结论
+        return "unknown"
     except Exception:
         # 检查失败不影响服务运行 —— 只是少一条提示
+        return "unknown"
+
+
+def firewall_hint(port: int) -> list[str]:
+    """
+    防火墙确实被拦时，给用户的修复提示；否则返回空列表。
+
+    与 check_firewall 分开，是因为调用方要按三态打印**不同**的话：
+    "blocked" 要给修复命令，"unknown" 要说明为什么查不了。
+    """
+    if check_firewall(port) != "blocked":
         return []
+    return [
+        f"防火墙没有放行 TCP {port} —— 手机连接会一直超时。",
+        "以管理员身份运行一次即可修复：",
+        f'  New-NetFirewallRule -DisplayName "YUcoach (TCP {port})" '
+        f"-Direction Inbound -Protocol TCP -LocalPort {port} "
+        f"-Action Allow -Profile Any",
+    ]
 
 
 def _allows_port(rule: dict[str, str], port: int) -> bool:
@@ -1070,14 +1114,23 @@ def main() -> int:
     # 用户先是看到地址、去手机上填，然后失败；这里要能在同一屏上
     # 直接告诉他原因，而不是让他回去翻文档。
     fw = check_firewall(args.port)
-    if fw:
-        print("  " + "-" * 64)
-        for line in fw:
+    if fw == "blocked":
+        for line in firewall_hint(args.port):
             print(f"  {line}")
         print("  " + "-" * 64)
         print()
-    else:
+    elif fw == "allowed":
         print(f"  [OK] 防火墙已放行 TCP {args.port}")
+        print()
+    else:
+        # "unknown"：读不到规则（通常是权限不足）。
+        # ⚠️ 这里**不能**说"没放行" —— 那是猜测，而且实测误报过：
+        #    规则明明存在，用户却被引去加规则。
+        print("  防火墙状态未能确认（读取规则需要管理员权限）。")
+        print("  这不代表被拦截 —— 若手机连不上，优先检查：")
+        print("    1. 手机与电脑是否在同一网络")
+        print("    2. 地址是否用的上面打印的那个 IP")
+        print("    3. 手机热点是否开着 AP 隔离（需关闭）")
         print()
 
     print("  Ctrl+C 停止")
