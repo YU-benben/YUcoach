@@ -73,23 +73,62 @@ python -m backend.server.app --port 8770
 
 **两条路，任选一条。**
 
-**① 用已打好的包**（根目录，2026-10-05 构建）：
+**① 用已打好的包**（根目录，release 版）：
 
 ```
 YUcoach.apk
 ```
 
-**② 自己构建**（推荐 —— 代码改过之后必须走这条）：
+**② 自己构建**：
 
 ```powershell
 cd mobile
-flutter build apk --debug
-# 产物：mobile\build\app\outputs\flutter-apk\app-debug.apk
+flutter build apk --release     # 日常使用，约 20 MB
+# 产物：mobile\build\app\outputs\flutter-apk\app-release.apk
 ```
 
 > ⚠️ `mobile\build\` 是**构建产物目录，不纳入版本控制**，清理生成物时会整个删掉。
 > 所以上面那条路径**只在构建成功后才存在**——README 早期版本直接把它当作
 > "安装包位置"，会让人以为文件丢了。源码在 `mobile\lib\`，随时能重新构建。
+
+#### ⚠️ 必须用 release，且 manifest 里两项不能漏
+
+**这一节是踩坑记录，删之前先看完。**
+
+Flutter 模板的 `INTERNET` 权限**只声明在 `src/debug` 和 `src/profile`
+的 AndroidManifest 里，`src/main`（release 构建用的）默认没有**。
+
+于是会出现极难排查的现象：
+
+| 构建类型 | INTERNET 权限 | 结果 |
+|---|---|---|
+| `--debug` | ✅ 有（模板自动加） | 能连上分析服务 |
+| `--release` | ❌ **没有** | **连不上**，只报一句 "连不上这个地址" |
+
+**实测踩过（2026-10-13）**：换成 release APK 后手机连不上，而**同一时刻手机
+浏览器访问同一个地址完全正常** —— 因为浏览器有联网权限，App 没有。
+这个对比是判断"权限问题 vs 网络问题"的关键手段。
+
+第二项是 `usesCleartextTraffic`：Android 9（API 28）起默认**禁止明文 HTTP**，
+而本 App 连的是 `http://192.168.x.x:8770`（局域网、无证书）。
+不开这项请求会被系统直接掐断。
+
+**两项都已写在 [mobile/android/app/src/main/AndroidManifest.xml](mobile/android/app/src/main/AndroidManifest.xml) 里**，
+改它之前先读那里的注释。
+
+**验证产物是否正确**（构建后跑一次，用 Android SDK 的 aapt2）：
+
+```powershell
+$sdk = "$env:LOCALAPPDATA\Android\Sdk\build-tools"
+$aapt = (Get-ChildItem $sdk -Recurse -Filter aapt2.exe | Select-Object -Last 1).FullName
+
+# 权限：必须看到 android.permission.INTERNET
+& $aapt dump permissions build\app\outputs\flutter-apk\app-release.apk
+
+# 明文流量：必须看到 usesCleartextTraffic=true
+& $aapt dump xmltree build\app\outputs\flutter-apk\app-release.apk --file AndroidManifest.xml |
+    Select-String cleartext
+```
 
 传到手机安装。**手机与电脑要在同一个 WiFi 下。**
 
