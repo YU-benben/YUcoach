@@ -40,6 +40,30 @@ class ServerConfig {
     }
     return s;
   }
+
+  /// 把服务端返回的**相对路径**拼成完整 URL。
+  ///
+  /// 为什么需要它：报告里的图片地址形如
+  /// `keyframes/<任务ID>/f000014_touchdown.jpg` —— 是相对路径。
+  /// 分析引擎不知道自己被哪个地址访问（见 analyze.py 里
+  /// keyframe_url_prefix 的注释），所以拼接只能由客户端做。
+  ///
+  /// 返回 null 表示拼不出来（地址为空）。**不要返回一个坏 URL** ——
+  /// 那样界面只会显示一张破图，看不出是"没配地址"还是"服务没开"。
+  ///
+  /// 已经带协议的绝对地址原样返回，便于服务端将来改成直传完整 URL。
+  static String? resolveUrl(String? baseUrl, String? relativePath) {
+    final rel = (relativePath ?? '').trim();
+    if (rel.isEmpty) return null;
+    if (rel.startsWith('http://') || rel.startsWith('https://')) return rel;
+
+    final base = normalize(baseUrl ?? '');
+    if (base.isEmpty) return null;
+
+    // 两侧都可能有斜杠，统一去掉后再拼，避免出现 `//keyframes`
+    final r = rel.startsWith('/') ? rel.substring(1) : rel;
+    return '$base/$r';
+  }
 }
 
 /// 服务端状态。

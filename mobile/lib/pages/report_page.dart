@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
 import '../data/analysis_repository.dart';
+import '../data/analysis_server_client.dart';
 import '../data/report_view_model.dart';
 import '../models/models.dart';
 import '../widgets/finding_card.dart';
 import '../widgets/metric_row.dart';
 import '../widgets/quality_banner.dart';
 import '../widgets/app_colors.dart';
+import 'server_settings_page.dart' show ServerSettings;
 
 /// 报告页。
 ///
@@ -28,6 +30,16 @@ class ReportPage extends StatefulWidget {
 class _ReportPageState extends State<ReportPage> {
   final _repo = const FixtureDataSource();
 
+  /// 分析服务地址。用来把关键帧图的**相对路径**拼成完整 URL。
+  ///
+  /// 为什么必须在这里读：报告里的 `image_url` 形如
+  /// `keyframes/<任务ID>/f000014_touchdown.jpg` —— 是相对路径。
+  /// 分析引擎不知道自己被哪个地址访问（见 analyze.py 的
+  /// keyframe_url_prefix 注释），所以拼接只能由客户端做。
+  ///
+  /// 为空（用户还没连过服务）时，关键帧图解会给出提示而不是空白图。
+  String? _baseUrl;
+
   /// 为空表示还没拿到数据；从数据页进入时构造时即有值
   late AnalysisResult? _result = widget.initialResult;
   String _scenario = 'normal';
@@ -40,8 +52,30 @@ class _ReportPageState extends State<ReportPage> {
   @override
   void initState() {
     super.initState();
+    _loadBaseUrl();
     if (_isDevMode) _load();
   }
+
+  /// 读取已保存的服务地址。
+  ///
+  /// 失败不报错：报告的文字部分在没网时也能看，
+  /// 不该因为取不到图片地址就让整页失败。
+  Future<void> _loadBaseUrl() async {
+    try {
+      final url = await ServerSettings().baseUrl();
+      if (!mounted) return;
+      setState(() => _baseUrl = url);
+    } catch (_) {
+      // 读不到就保持 null，关键帧区会给出相应提示
+    }
+  }
+
+  /// 把相对图片路径拼成完整 URL；地址缺失时返回 null。
+  ///
+  /// 拼接逻辑本身放在 ServerConfig.resolveUrl —— 那里有单元测试，
+  /// 因为拼错的后果只是一张破图，不会抛异常，靠人工看很难发现。
+  String? _imageUrlFor(String relative) =>
+      ServerConfig.resolveUrl(_baseUrl, relative);
 
   Future<void> _load() async {
     setState(() {
@@ -131,7 +165,7 @@ class _ReportPageState extends State<ReportPage> {
         const SizedBox(height: 24),
         _SectionTitle('关键帧图解'),
         const SizedBox(height: 8),
-        _KeyframeSection(result: r),
+        _KeyframeSection(result: r, resolveImage: _imageUrlFor),
 
         // 指标对比：必须按视角分组。
         // 侧面与额状面测的是完全不同的几何量，混在一起会让教练误读。
@@ -254,10 +288,17 @@ class _Summary extends StatelessWidget {
   }
 }
 
+/// 把相对图片路径解析成完整 URL 的函数。
+///
+/// 返回 null 表示「解析不了」—— 通常是用户还没配置分析服务地址，
+/// 或读了设置但没读到。调用方要据此给出提示，而不是显示一张破图。
+typedef ImageUrlResolver = String? Function(String relativePath);
+
 class _KeyframeSection extends StatelessWidget {
-  const _KeyframeSection({required this.result});
+  const _KeyframeSection({required this.result, required this.resolveImage});
 
   final AnalysisResult result;
+  final ImageUrlResolver resolveImage;
 
   @override
   Widget build(BuildContext context) {
@@ -274,17 +315,119 @@ class _KeyframeSection extends StatelessWidget {
 
     return Column(
       children: keyframes
-          .map((k) => _KeyframeCard(keyframe: k, view: result.session.view))
+          .map((k) => _KeyframeCard(
+                keyframe: k,
+                view: result.session.view,
+                resolveImage: resolveImage,
+              ))
           .toList(),
     );
   }
 }
 
+/// 关键帧图片。
+///
+/// 三种状态都必须有明确表现 —— 空着会被当成「系统坏了」：
+///   加载中  进度指示
+///   加载失败 说明原因（最常见的是分析服务没开）
+///   未配置  提示去哪配地址
+class _KeyframeImage extends StatelessWidget {
+  const _KeyframeImage({required this.url, required this.frameIndex});
+
+  /// 完整 URL；null 表示没能解析出地址。
+  final String? url;
+  final int frameIndex;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    Widget message(IconData icon, String title, String hint) => Container(
+          height: 180,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: context.subtleSurface,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 28, color: context.faintText),
+              const SizedBox(height: 8),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(color: context.mutedText),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                hint,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: context.faintText),
+              ),
+            ],
+          ),
+        );
+
+    final u = url;
+    if (u == null || u.isEmpty) {
+      return message(
+        Icons.cloud_off_outlined,
+        '还没连接分析服务',
+        '关键帧图存在电脑上，需要先在「我的 → 分析服务」里填地址。',
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: Image.network(
+        u,
+        height: 180,
+        width: double.infinity,
+        fit: BoxFit.cover,
+        loadingBuilder: (ctx, child, progress) {
+          if (progress == null) return child;
+          // 局域网下通常一闪而过，但大图或慢 WiFi 时要有反馈
+          final total = progress.expectedTotalBytes;
+          final value = total != null
+              ? progress.cumulativeBytesLoaded / total
+              : null;
+          return Container(
+            height: 180,
+            alignment: Alignment.center,
+            color: context.subtleSurface,
+            child: SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(value: value, strokeWidth: 2.5),
+            ),
+          );
+        },
+        errorBuilder: (ctx, err, stack) => message(
+          Icons.broken_image_outlined,
+          '取不到这张图（帧 $frameIndex）',
+          '确认电脑上的分析服务还开着、手机与电脑在同一网络。\n'
+              '图片按任务保存在电脑上，服务关闭后就取不到了。',
+        ),
+      ),
+    );
+  }
+}
+
 class _KeyframeCard extends StatelessWidget {
-  const _KeyframeCard({required this.keyframe, required this.view});
+  const _KeyframeCard({
+    required this.keyframe,
+    required this.view,
+    required this.resolveImage,
+  });
 
   final Keyframe keyframe;
   final SessionView view;
+  final ImageUrlResolver resolveImage;
 
   @override
   Widget build(BuildContext context) {
@@ -315,22 +458,17 @@ class _KeyframeCard extends StatelessWidget {
               ],
             ),
           ),
-          // 图片区域：真实图片来自服务端 URL，开发期用占位块。
-          Container(
-            height: 180,
-            width: double.infinity,
-            margin: EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: context.hairline,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              '关键帧图（帧 ${keyframe.frameIndex}）\n'
-              '骨架叠加 + 角度弧线 + 尺度条',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: context.faintText),
+          // 图片区域：服务端渲染好的骨骼标注图 ——
+          // 含骨架连线、角度弧线与尺度条（见 backend/analysis/keyframes.py）。
+          //
+          // ⚠️ 这里曾经是一个**写死的文字占位块**。数据一直有
+          //    （Keyframe.imageUrl 早就解析了），只是没人用它取图，
+          //    于是教练永远看不到标注图。2026-10-13 接通。
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: _KeyframeImage(
+              url: resolveImage(keyframe.imageUrl),
+              frameIndex: keyframe.frameIndex,
             ),
           ),
           // 尺度条。跟踪拍摄下每帧的像素米比不同，不标注会让教练误判体型变化。
