@@ -9,6 +9,56 @@
 
 ---
 
+> ### ⚠️ 实现勘误（2026-10-13）
+>
+> #### ⚠️ App 不再自己画骨架
+>
+> §5 / §6 / §7 / §8 多处写着「App 用 `CustomPaint` 按 fixture 坐标画骨架」。
+> **这条能力已不存在** —— 关键帧图现在由**服务端渲染**
+> （`backend/analysis/keyframes.py` 出骨架连线 + 角度弧 + 尺度条），
+> App 用 `Image.network` 显示（`mobile/lib/pages/report_page.dart`）。
+>
+> 相关模块 `skeleton_painter.dart` / `angle_painter.dart` / `skeleton_view.dart`
+> 已随手机端姿态识别一并删除（2026-10-11）。
+>
+> **对 Fixture 的影响**：`analysis_*.json` 里的 `keyframes[].image_url`
+> 是**相对路径**，fixture 阶段它指向一个不存在的图 —— 界面会显示
+> "取不到这张图"（这是设计好的降级表现，不是故障）。
+>
+> #### §2 三种数据源：只落地了一种
+>
+> 文档设计了 `FixtureDataSource` / `RecordedDataSource` / `HttpDataSource`
+> 三种实现 + `--dart-define=ENV` 切换。实际：
+>
+> | 设计 | 实际 |
+> |---|---|
+> | `FixtureDataSource` | ✅ 存在（`mobile/lib/data/analysis_repository.dart`） |
+> | `RecordedDataSource` | ❌ 未实现 |
+> | `HttpDataSource` | ❌ 未实现（真实路径是 `analysis_server_client.dart`） |
+> | `--dart-define=ENV` 切换 | ❌ 未落地（全仓库检索 `fromEnvironment` 命中 0） |
+>
+> 所以 §2 那句「接后端时只切换数据源，不改一行业务代码」**目前无法验证**。
+>
+> #### §账号体系已不是"延后"
+>
+> 文档标「账号体系 ⏸ 延后，需要服务端」。**已打通**：
+> App 有登录/注册页，服务端有 `/api/auth/register` 等接口，
+> 且**首次见到某用户名时自动建号**（`tier=free`）。
+> 见 [13](13-分析引擎实现进度.md) §12。
+>
+> #### §5.3 素材图方案已不需要
+>
+> 文档要求准备 `assets/samples/side_run.jpg`、`front_run.jpg`、`CREDITS.md`。
+> 关键帧图改由服务端渲染后，**本地素材图不再需要**，
+> `mobile/assets/` 下只有 `branding/` 与 `fixtures/`。
+> `CREDITS.md` 的检查项可删。
+>
+> #### 仍然正确的部分
+>
+> §3 的 fixture 清单与 `mobile/assets/fixtures/`、`samples/fixtures/`
+> **完全一致**（3 份已有、3 份待补）；§「模型必须由 Schema 生成」也成立。
+
+
 ## 1. 为什么需要这份文档
 
 `08-App功能与交互规范.md` 定义了界面长什么样，但没有回答一个实际开发问题：

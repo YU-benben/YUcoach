@@ -8,7 +8,7 @@
 |---|---|
 | 状态 | **可运行**（分析链路 + App 已打通） |
 | 交付形态 | 安卓 App（Flutter）+ 电脑端分析服务（Python） |
-| 测试 | 141 个后端测试 + 74 个 App 测试，21 道质量门禁 |
+| 测试 | **215** 个后端测试 + **188** 个 App 测试；门禁 21 条（已实现 19 条） |
 | 目标客户 | 训练队（中学 / 大学 / 体校 / 俱乐部青训） |
 
 ---
@@ -396,19 +396,21 @@ YUcoach/
 │   ├── paths.py              ★ 路径唯一事实源
 │   ├── analysis/             分析链路
 │   │   ├── video_io.py       解码、帧率校验、镜头运动检测
-│   │   ├── pose_estimator.py 姿态提取（可插拔）
-│   │   ├── keypoint_map.py   COCO-17 → 16 点映射 + 足部点推导
+│   │   ├── pose_estimator.py 姿态提取·YOLOv8-pose（默认，足部点几何推导）
+│   │   ├── pose_estimator_rtm.py 姿态提取·RTMPose+Halpe26（**实测趾尖/足跟**）
+│   │   ├── keypoint_map.py   COCO-17 / Halpe26 → 16 点映射
 │   │   ├── reference_scale.py 像素 → 米
 │   │   ├── metrics_base.py   指标规格（20 个的声明）
 │   │   ├── metrics.py        指标实现
 │   │   ├── phases.py         相位划分与事件检测
+│   │   ├── keyframes.py      关键帧选择与渲染（骨架+角度弧+尺度条）
 │   │   ├── rules.py          规则引擎
 │   │   ├── report.py         报告组装
 │   │   └── analyze.py        完整管线（CLI 与服务端共用）
 │   ├── contracts/            JSON Schema（8 个）
 │   ├── standards/            标准值加载与机械校验
 │   ├── server/               HTTP 服务
-│   └── tests/                141 个测试
+│   └── tests/                215 个测试
 │
 ├── mobile/                   Flutter App
 │   └── lib/
@@ -416,17 +418,27 @@ YUcoach/
 │       ├── domain/           本地数据结构
 │       ├── data/             本地存储 + 网络客户端
 │       ├── pages/            页面
+│       ├── pose/             仍被使用的姿态支撑模块（6 个，见下）
 │       └── widgets/          可复用组件
 │
 ├── data/standards/           ★ 标准值库（内容，非代码）
-├── docs/                     14 份设计文档
+├── docs/                     16 份设计文档
 ├── YUcoach相关论文/           文献 PDF 存档（做标准值检索用）
 ├── samples/
 │   ├── videos/               样例素材
 │   └── fixtures/             三份通过契约校验的假数据
 └── scripts/                  质量门禁与工具
+    ├── make_overlay.py       关键点叠加图（QC-4 目视核对用）
+    ├── check_foot_scale.py   足部点解剖学尺度自检
     └── literature/           文献检索工具（下载、提取 PDF 文本、核算标准值）
 ```
+
+> **`mobile/lib/pose/` 只保留 6 个模块**，它们是报告页的角度选择器与
+> 既有测试在用的支撑代码（`pose_types` / `angle_catalog` /
+> `angle_selection` / `gait_events` / `smoothing` / `foot_derivation`）。
+>
+> 手机端的姿态**推理**已于 2026-10-11 移除 —— 骨架提取只在电脑端做。
+> 见 [docs/13](docs/13-分析引擎实现进度.md) §11。
 
 ### 关于"生成物都在项目内"
 
@@ -495,10 +507,10 @@ YUcoach/
 | `flight_time` | 125–145 ms | IAAF 2017，Table 17 |
 | `step_length_relative` | 1.08–1.20 | IAAF 2017，Figure 25 |
 
-其余 15 个在待补清单里，逐个记录"**需要什么数据、去哪里找、为什么现在没有**"。
+其余 **16 个**在待补清单里，逐个记录"**需要什么数据、去哪里找、为什么现在没有**"。
 
 ```powershell
-python scripts\check_standards.py     # 列出可用与待补
+.\.venv\Scripts\python.exe scripts\check_standards.py     # 列出可用与待补
 ```
 
 ### 三道机械防线
@@ -517,7 +529,152 @@ python scripts\check_standards.py     # 列出可用与待补
 > **口径未核实的数值不入库**，记录在 `data/standards/iaaf_2017_100m.yaml`
 > 的 `rejected` 段，连同完整理由。
 
----
+### 怎么自己加一条标准值 / 一条规则 ⭐
+
+> 这一节回答"**报告里的建议是怎么来的，我怎么自己加一条**"。
+> 完整规范见 [docs/04](docs/04-参考标准值规范.md)。
+
+#### 两层结构
+
+```
+① 标准值  data/standards/*.yaml    ← 数字从哪来（必须有出处）
+              ↓  机械校验：没有图表号 = 加载不进来
+② 规则    backend/analysis/rules.py ← 数字偏了怎么办（机制解释 + 练习）
+              ↓
+③ 建议    报告里的 findings
+```
+
+**关键设计**：`rules.py` 里**没有数值区间**。区间全在 YAML。
+所以补文献只改 YAML，不动代码，也不会漏改某处。
+
+#### 第一步：加一条标准值
+
+编辑 `data/standards/sprint_100m.yaml` 的 `verified:` 段：
+
+```yaml
+  - metric_id: knee_angle_touchdown    # 必须是 20 个指标之一
+    view: side                          # 必须与指标定义的视角一致
+    phase: max_velocity                 # set/start/acceleration/transition/max_velocity/deceleration/whole_run
+    window: single_event                # ⚠️ 见下，最容易错
+    population: {gender: male, level: elite, event: "100m", age_range: "21-35"}
+    n: 14
+    low: 133.1
+    high: 166.7                         # ⚠️ 必须写**换算后**的值
+    mean: 149.9
+    sd: 8.4
+    source:
+      authors: "…"
+      year: 2017
+      title: "…"
+      journal: "…"
+      locator: "Table 10，Knee angle at touchdown 行"   # ⚠️ 必填
+    measurement_note: "原文口径：…与本项目定义是否一致…"  # ⚠️ 必填
+    extraction_note: "怎么取的、剔除了什么、区间怎么算的"
+    citation_zh: "给教练看的出处"
+    caveats: ["条目自身的局限，会显示在报告里"]
+```
+
+**七道机械校验**（不通过就加载不进来）：
+
+| # | 检查 | 防的是 |
+|---|---|---|
+| 1 | `metric_id` 在 20 个指标里 | 拼错、已删指标残留 |
+| 2 | `view` 与指标定义一致 | 跨视角套用（几何量会完全变味） |
+| 3 | `phase` 合法 | —— |
+| 4 | **`window` 必填** | **"瞬间"当成"均值"用** |
+| 5 | **`source.locator` 必填** | 凭印象编造 |
+| 6 | `measurement_note` 必填 | 口径不符 |
+| 7 | 数值落在**生理可信范围**内 | 从 PDF 提取时行列错位 |
+
+#### ⚠️ `window` 是最容易错的一项
+
+它问的是：这条数据测的是**一段时期的均值**，还是**某一个瞬间**？
+
+| 取值 | 含义 |
+|---|---|
+| `whole_phase` | 该阶段所有帧的均值 ← **本项目 per-phase 指标用的就是这个** |
+| `single_event` | 某一次事件的瞬间（如"第一次着地那一帧"） |
+| `event_mean` | 只取事件帧的平均 |
+| `whole_run` | 全程平均 |
+| `unspecified` | 原文没说（允许但会告警） |
+
+**真实教训**：Walker et al. 2021 报告世界级短跑选手**第一次着地瞬间**的
+躯干角（前倾 51±3°）。数据质量极高、来源权威、数值也合理 ——
+但本项目的 `trunk_lean` 取的是加速段**所有帧的均值**（约 36°）。
+加速段躯干单调抬起，所以那是**峰值区间**。照此入库
+→ **每一个正常运动员都被报"躯干抬起过早"**。
+
+> **来源权威 + 数值合理 ≠ 可用。**
+
+#### ⚠️ 单位
+
+`ground_contact_time` / `flight_time` 必须写**毫秒**，而文献常写秒：
+
+```
+文献  0.101 s   →   写 101    ✅
+                    写 0.101  ❌ 加载器会拦下并提示"看起来是未换算的原值"
+```
+
+加载器**双向核对**：既防忘换算，也防换算两次。
+
+#### 第二步：加一条规则
+
+编辑 `backend/analysis/rules.py` 的 `RULES` 列表：
+
+```python
+Rule(
+    rule_id="trunk_lean_accel_too_low",
+    metric_id="trunk_lean",
+    title="加速段躯干抬起过早",     # 面向教练，不含术语
+    direction="low",                # low=低于下限报警 / high=高于上限报警
+    severity="major",               # major / minor
+    phase="acceleration",           # ⚠️ 必须与标准值的 phase 一致
+    mechanism="为什么这是问题…",     # 只报数值等于没说
+    drills=[{"drill_id": "…", "name": "…", "sets": "4", "reps": "…",
+             "cue": "能在跑道上直接喊的话（≤20 字）",
+             "mechanism": "…"}],
+    caveat="什么时候这条判定不成立…",
+)
+```
+
+**两个必须注意的点**：
+
+1. **`phase` 必须和标准值一致。** 曾经因为不一致导致规则**永不触发**，
+   而两边都不报错 —— 表现只是"这条规则从来没生效"。
+   抓到它的是 `scripts/verify_rules_e2e.py`。
+2. **改了判据或处方必须递增 `RULE_VERSION`**，否则回答不了
+   "为什么同样的数据这次结论不一样"。
+
+#### 第三步：验证（必做）
+
+```powershell
+.\.venv\Scripts\python.exe scripts\check_standards.py      # 机械校验
+.\.venv\Scripts\python.exe scripts\verify_rules_e2e.py     # 规则端到端
+.\.venv\Scripts\python.exe scripts\check_all.py            # 门禁 21 条（已实现 19 条）
+```
+
+> ⚠️ **不合规的条目会被静默拒绝加载**，运行时表现为"那条规则不生效"。
+> 所以改完**必须跑门禁**，否则你只是写了个不生效的 YAML。
+
+#### 三条不能违反的规矩
+
+| # | 规矩 | 为什么 |
+|---|---|---|
+| **1** | **没有出处就不入库** | 编造的标准值是**全项目唯一无法通过测试发现的错误**（[docs/04](docs/04-参考标准值规范.md) §1）。宁可留空 |
+| **2** | **口径/窗口/视角不符 → 宁缺毋滥** | 见上面 Walker 那条 |
+| **3** | **建议必须带机制解释 + 可执行练习** | 只说"膝角偏大"等于没说 |
+
+**留空是被鼓励的。** 现在 20 个指标里 5 个有标准值、16 个在 `pending`
+清单里等着 —— 这不是欠债，是有意的诚实。
+
+#### 当前缺什么（挑一条去检索）
+
+`data/standards/sprint_100m.yaml` 的 `pending:` 段列了 16 条。
+**最值得先做的是 `trunk_lean`** —— 两条规则已经写好
+（`trunk_lean_accel_too_low` / `trunk_lean_maxvel_too_high`），
+只缺标准值，补上就立刻生效。
+
+> ⚠️ 检索时记住：必须是**"阶段均值"**口径，不是"某个瞬间"。
 
 ## 七、质量门禁
 
