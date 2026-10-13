@@ -731,13 +731,41 @@ class Handler(BaseHTTPRequestHandler):
         # 顺序：先查账号与额度（便宜），再查文件是否存在（便宜），
         # 最后才扣额度并起任务。
         username = (params.get("username") or "").strip()
-        acc = ACCOUNTS.get(username) if username else None
-        if acc is None:
+        if not username:
             self._send_json({
                 "error": "请先登录",
-                "hint": "分析需要账号来记录额度。",
+                "hint": "分析需要账号来记录额度。"
+                        "App 里注册的账号若是用手机号，就没有用户名，"
+                        "请用「用户名」方式重新注册。",
             }, 401)
             return
+
+        acc = ACCOUNTS.get(username)
+
+        # ---- 首次提交时自动建号 ----
+        #
+        # 为什么要有这一步：App 的账号体系是**纯本地**的
+        # （AuthService 存在手机文件里），而额度记在服务端。
+        # 两边从来没接通过，于是用户明明登录了、提交分析却一律
+        # 收到「请先登录」——而那句话完全指不出问题在哪。
+        #
+        # 这里做**信任式自动建号**：App 说是谁就是谁，首次见到就
+        # 建一个普通账号。这个信任级别与服务本身一致 ——
+        # 它本来就是「无认证、仅供局域网内短期使用」（见上面的 WARN），
+        # 手机上存密码也不会让它更安全。
+        #
+        # 额度仍然由服务端裁定并累计，客户端改不了。
+        if acc is None:
+            acc = Account(
+                username=username,
+                password_hash="",          # 无需密码登录，故不存
+                tier="free",
+                display_name=params.get("athlete_name") or username,
+                role="",
+                period=current_period(),
+            )
+            ACCOUNTS.upsert(acc)
+
         if acc.ensure_period(current_period()):
             ACCOUNTS.upsert(acc)
         if not acc.can_analyze():

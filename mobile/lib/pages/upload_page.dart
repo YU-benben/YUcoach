@@ -9,6 +9,7 @@ import '../data/athlete_repository.dart';
 import '../data/session_repository.dart';
 import '../data/video_probe.dart';
 import '../domain/athlete_record.dart';
+import '../domain/local_user.dart';
 import '../domain/session_record.dart';
 import '../models/models.dart';
 import '../widgets/capture_info_form.dart';
@@ -30,10 +31,21 @@ class UploadPage extends StatefulWidget {
     super.key,
     required this.athletes,
     required this.sessions,
+    this.user,
   });
 
   final AthleteRepository athletes;
   final SessionRepository sessions;
+
+  /// 当前登录的用户。
+  ///
+  /// 为什么上传页需要它：提交分析时服务端要求带 `username`，
+  /// 用来确认账号并扣额度。**服务端的账号体系是独立的**——
+  /// 它不认识 App 的本地账号，所以必须把这个身份显式传过去。
+  ///
+  /// 曾经这里没有这个参数，导致提交的 payload 里压根没有 username 字段，
+  /// 服务端一律回「请先登录」——而用户明明已经登录了。
+  final LocalUser? user;
 
   @override
   State<UploadPage> createState() => UploadPageState();
@@ -495,6 +507,32 @@ class UploadPageState extends State<UploadPage> implements Refreshable {
       return;
     }
 
+    // ---- 账号检查（放在上传之前）----
+    //
+    // 提交分析时服务端要求带 username 来认账号、扣额度。
+    // 若账号是**用手机号注册**的，LocalUser.username 是空的，
+    // 服务端就会回「请先登录」——而用户明明已经登录了，
+    // 那句话完全指不出问题在哪。
+    //
+    // ⚠️ 必须在上传**之前**拦：否则用户白等一次几百 MB 的上传
+    //    才被告知账号不能用。
+    final username = (widget.user?.username ?? '').trim();
+    if (username.isEmpty) {
+      setState(() {
+        _saving = false;
+        _phase = _Phase.failed;
+        _analysisError = '当前账号没有用户名，无法提交分析';
+        _analysisHint =
+            '分析要在电脑上排队执行，服务端需要一个用户名来记账。'
+            '你是用手机号注册的，所以缺这一项。'
+            '请退出后用「用户名」方式重新注册（登录页可切换）。'
+            '这次的记录已存在本机，换账号后仍能在「数据」里看到。';
+      });
+      await widget.sessions.markFailed(
+          record.sessionId, '账号没有用户名，未提交分析');
+      return;
+    }
+
     // ---- 上传 ----
     setState(() {
       _phase = _Phase.uploading;
@@ -561,6 +599,9 @@ class UploadPageState extends State<UploadPage> implements Refreshable {
         hasLaneLine: info.hasLaneLine,
         cameraFollowed: info.cameraFollowed,
         sessionId: record.sessionId,
+        // 服务端靠它认账号、扣额度。为空时服务端会回「请先登录」——
+        // 所以下面提交前会先拦一道，把话说明白。
+        username: widget.user?.username,
       );
       await widget.sessions.markQueued(record.sessionId, jobId);
     } on ServerException catch (e) {

@@ -197,6 +197,9 @@ class _HomeShellState extends State<HomeShell> {
         key: _uploadKey,
         athletes: widget.athletes,
         sessions: widget.sessions,
+        // 提交分析要带 username 去服务端认账号、扣额度。
+        // 服务端不认识 App 的本地账号，必须显式传身份过去。
+        user: widget.user,
       ),
       DataPage(
         key: _dataKey,

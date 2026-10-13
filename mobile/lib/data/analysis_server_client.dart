@@ -254,11 +254,16 @@ class AnalysisServerClient {
   // -- 提交分析 -----------------------------------------------------------
 
   /// 提交分析任务，返回 jobId。
+  ///
+  /// [username] 是**服务端账号**的用户名，用来认账号并扣额度。
+  /// 服务端不认识 App 的本地账号，所以这个字段必须显式带过去；
+  /// 缺了它服务端会回 401「请先登录」——即使 App 里已经登录。
   Future<String> submitAnalysis({
     required String baseUrl,
     required String videoId,
     required String athleteId,
     required String athleteName,
+    String? username,
     String gender = 'male',
     String event = '100m',
     String level = 'college',
@@ -284,6 +289,9 @@ class AnalysisServerClient {
       'test_type': testType,
       'team_id': teamId,
     };
+    if (username != null && username.trim().isNotEmpty) {
+      payload['username'] = username.trim();
+    }
     if (heightCm != null) payload['height_cm'] = heightCm;
     if (cameraDistanceM != null) payload['camera_distance_m'] = cameraDistanceM;
     if (cameraHeightM != null) payload['camera_height_m'] = cameraHeightM;
