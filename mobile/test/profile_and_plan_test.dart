@@ -38,6 +38,7 @@ void main() {
       final auth = newAuth();
       final r = await auth.register(
         phone: '13800138000',
+        username: 'u13800138000',
         name: '小明',
         password: 'password123',
         passwordConfirm: 'password123',
@@ -51,6 +52,7 @@ void main() {
       final auth = newAuth();
       final r = await auth.register(
         phone: '13800138001',
+        username: 'u13800138001',
         name: '小明',
         password: 'password123',
         passwordConfirm: 'password123',
@@ -71,6 +73,7 @@ void main() {
       final auth = newAuth();
       final r = await auth.register(
         phone: '13800138002',
+        username: 'u13800138002',
         name: '教练',
         password: 'password123',
         passwordConfirm: 'password123',
@@ -92,6 +95,7 @@ void main() {
       final auth = newAuth();
       final r = await auth.register(
         phone: '13800138003',
+        username: 'u13800138003',
         name: '原名',
         password: 'password123',
         passwordConfirm: 'password123',
@@ -107,6 +111,7 @@ void main() {
       final auth = newAuth();
       final r = await auth.register(
         phone: '13800138004',
+        username: 'u13800138004',
         name: 'A',
         password: 'password123',
         passwordConfirm: 'password123',
@@ -127,6 +132,7 @@ void main() {
       final auth = newAuth();
       final r = await auth.register(
         phone: '13800138005',
+        username: 'u13800138005',
         name: 'A',
         password: 'password123',
         passwordConfirm: 'password123',
@@ -284,20 +290,27 @@ void main() {
       expect(r.error, AuthError.usernameTaken);
     });
 
-    test('手机号和用户名都没有时拒绝注册', () async {
+    test('用户名留空时拒绝注册', () async {
+      // 用户名现在是**必填**：它是提交分析时服务端认账号、扣额度的依据。
+      // 以前允许"手机号或用户名二选一"，于是用手机号注册的账号
+      // 在服务端没有名字，提交分析只会收到「请先登录」。
       final auth = newAuth();
       final r = await auth.register(
+        username: '',
+        phone: '13800138000',
         name: 'X',
         password: 'password123',
         passwordConfirm: 'password123',
       );
       expect(r.ok, isFalse);
+      expect(r.error, AuthError.invalidUsername);
     });
 
     test('账号不存在与密码错误返回同一个原因（防账号枚举）', () async {
       final auth = newAuth();
       await auth.register(
         phone: '13800138000',
+        username: 'u13800138000',
         name: 'A',
         password: 'password123',
         passwordConfirm: 'password123',
@@ -327,6 +340,7 @@ void main() {
       final auth = newAuth();
       final r = await auth.register(
         phone: '13800138010',
+        username: 'u13800138010',
         name: 'A',
         password: 'password123',
         passwordConfirm: 'password123',
@@ -349,6 +363,7 @@ void main() {
       final auth = newAuth();
       final r = await auth.register(
         phone: '13800138011',
+        username: 'u13800138011',
         name: 'A',
         password: 'password123',
         passwordConfirm: 'password123',
@@ -393,6 +408,7 @@ void main() {
       final auth = newAuth();
       await auth.register(
         phone: '13800138012',
+        username: 'u13800138012',
         name: 'A',
         password: 'password123',
         passwordConfirm: 'password123',

@@ -89,14 +89,20 @@ class AuthService {
 
   // -- 注册 ---------------------------------------------------------------
 
-  /// 注册。手机号与用户名**二选一**（至少填一个）。
+  /// 注册。
   ///
-  /// 为什么保留两种：教练用手机号最自然（记得住）；
-  /// 但有些账号天生没有手机号（比如给管理员用的账号），
-  /// 强制手机号会把它们挡在门外。
+  /// **用户名必填**，手机号选填。
+  ///
+  /// 为什么用户名不能省：它是**服务端身份** —— 提交分析时要用它
+  /// 去服务端认账号、扣额度。以前允许"手机号或用户名二选一"，
+  /// 于是用手机号注册的账号在服务端没有名字，提交分析只会收到
+  /// 一句「请先登录」，而用户明明已经登录。一个身份分两种是问题的源头。
+  ///
+  /// 手机号保留为选填：有些账号天生没有手机号（比如给管理员用的），
+  /// 强制它会把这类用户挡在门外。它只用于日后找回账号。
   Future<AuthResult> register({
     String phone = '',
-    String username = '',
+    required String username,
     required String name,
     required String password,
     required String passwordConfirm,
@@ -104,14 +110,11 @@ class AuthService {
     final p = phone.trim();
     final u = username.trim();
 
-    if (p.isEmpty && u.isEmpty) {
-      return const AuthResult.failure(AuthError.invalidPhone);
+    if (u.isEmpty || !isValidUsername(u)) {
+      return const AuthResult.failure(AuthError.invalidUsername);
     }
     if (p.isNotEmpty && !isValidPhone(p)) {
       return const AuthResult.failure(AuthError.invalidPhone);
-    }
-    if (u.isNotEmpty && !isValidUsername(u)) {
-      return const AuthResult.failure(AuthError.invalidUsername);
     }
     if (password.length < 6) {
       return const AuthResult.failure(AuthError.weakPassword);
@@ -124,7 +127,7 @@ class AuthService {
     if (p.isNotEmpty && users.any((x) => x.phone == p)) {
       return const AuthResult.failure(AuthError.phoneTaken);
     }
-    if (u.isNotEmpty && users.any((x) => x.username == u)) {
+    if (users.any((x) => x.username == u)) {
       return const AuthResult.failure(AuthError.usernameTaken);
     }
 
@@ -134,7 +137,7 @@ class AuthService {
       userId: 'u_$stamp',
       phone: p,
       username: u,
-      name: name.trim().isEmpty ? (p.isNotEmpty ? p : u) : name.trim(),
+      name: name.trim().isEmpty ? u : name.trim(),
       // 队伍 id 用注册时间生成。目前一人一队；将来支持「加入已有队伍」时
       // 这个字段改为由邀请码决定，不影响其他逻辑。
       teamId: 't_$stamp',
@@ -195,6 +198,10 @@ class AuthService {
   ///
   /// 参数为 null 表示该项不改。
   /// [clearAge] / [clearAvatarFile] 用于**取消**填写（null 无法表达"清空"）。
+  ///
+  /// [username] 是**服务端身份**：提交分析时要用它去服务端认账号、扣额度。
+  /// 老账号可能是用手机号注册的（`username` 为空），需要在这里补上 ——
+  /// 否则它永远提交不了分析。
   Future<LocalUser?> updateProfile({
     required String userId,
     String? name,
@@ -204,6 +211,7 @@ class AuthService {
     int? age,
     String? avatarFile,
     String? phone,
+    String? username,
     bool clearAge = false,
     bool clearAvatarFile = false,
   }) async {
@@ -226,6 +234,22 @@ class AuthService {
       newPhone = p;
     }
 
+    // 用户名同理：它是服务端的账号名，撞了就分不清额度记在谁头上。
+    // 允许留空（等于"还没设"），但不允许设成一个非法值。
+    String? newUsername;
+    if (username != null) {
+      final u = username.trim();
+      if (u.isNotEmpty) {
+        if (!isValidUsername(u)) {
+          throw ArgumentError(AuthError.invalidUsername.message);
+        }
+        if (users.any((x) => x.userId != userId && x.username == u)) {
+          throw ArgumentError('该用户名已被其他账号占用');
+        }
+      }
+      newUsername = u;
+    }
+
     final trimmed = name?.trim();
     final updated = users[i].copyWith(
       // 昵称不允许改成空 —— 空昵称在界面上会显示成一片空白，
@@ -237,6 +261,7 @@ class AuthService {
       age: age,
       avatarFile: avatarFile,
       phone: newPhone,
+      username: newUsername,
       clearAge: clearAge,
       clearAvatarFile: clearAvatarFile,
     );

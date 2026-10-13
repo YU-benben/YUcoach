@@ -70,6 +70,7 @@ void main() {
       final auth = newAuth();
       final r = await auth.register(
         phone: '13800138000',
+        username: 'u13800138000',
         name: '张教练',
         password: 'abc123456',
         passwordConfirm: 'abc123456',
@@ -86,9 +87,14 @@ void main() {
 
     test('手机号格式不对被拒绝', () async {
       final auth = newAuth();
-      for (final bad in ['', '138', '23800138000', '1380013800a', '138001380001']) {
+      // ⚠️ 空串**不在**这个列表里：手机号现在是选填，
+      //    不填是合法的（有些账号天生没有手机号）。见 register() 的说明。
+      for (final bad in ['138', '23800138000', '1380013800a', '138001380001']) {
         final r = await auth.register(
           phone: bad,
+          // 用户名给一个合法值：本测试要验证的是**手机号**格式校验，
+          // 用户名跟着一起非法就会让两条规则混在一起，测不出是哪条拦的。
+          username: 'u${bad.hashCode.abs()}',
           name: 'x',
           password: 'abc123456',
           passwordConfirm: 'abc123456',
@@ -98,10 +104,27 @@ void main() {
       }
     });
 
+    test('不填手机号也能注册（用户名必填，手机号选填）', () async {
+      // 手机号只用于日后找回账号，不是登录的必需条件 ——
+      // 强制它会挡住没有手机号的用户（比如给管理员用的账号）。
+      final auth = newAuth();
+      final r = await auth.register(
+        phone: '',
+        username: 'nomobile',
+        name: '无手机号',
+        password: 'abc123456',
+        passwordConfirm: 'abc123456',
+      );
+      expect(r.ok, isTrue, reason: '手机号留空时注册应当成功');
+      expect(r.user!.username, 'nomobile');
+      expect(r.user!.phone, '');
+    });
+
     test('密码太短被拒绝', () async {
       final auth = newAuth();
       final r = await auth.register(
         phone: '13800138000',
+        username: 'u13800138000',
         name: 'x',
         password: '12345',
         passwordConfirm: '12345',
@@ -113,6 +136,7 @@ void main() {
       final auth = newAuth();
       final r = await auth.register(
         phone: '13800138000',
+        username: 'u13800138000',
         name: 'x',
         password: 'abc123456',
         passwordConfirm: 'abc123457',
@@ -124,12 +148,16 @@ void main() {
       final auth = newAuth();
       await auth.register(
         phone: '13800138000',
+        username: 'first_user',
         name: 'a',
         password: 'abc123456',
         passwordConfirm: 'abc123456',
       );
+      // ⚠️ 第二次必须换一个**用户名** —— 若沿用同一个，
+      //    拦下来的是用户名重复而不是手机号重复，这条测试就测偏了。
       final r = await auth.register(
         phone: '13800138000',
+        username: 'second_user',
         name: 'b',
         password: 'abc123456',
         passwordConfirm: 'abc123456',
@@ -144,6 +172,7 @@ void main() {
       final auth = newAuth();
       await auth.register(
         phone: '13800138000',
+        username: 'u13800138000',
         name: '张教练',
         password: 'abc123456',
         passwordConfirm: 'abc123456',
@@ -166,6 +195,7 @@ void main() {
       final first = newAuth();
       await first.register(
         phone: '13800138000',
+        username: 'u13800138000',
         name: '张教练',
         password: 'abc123456',
         passwordConfirm: 'abc123456',
@@ -189,6 +219,7 @@ void main() {
       final auth = newAuth();
       await auth.register(
         phone: '13800138000',
+        username: 'u13800138000',
         name: '张教练',
         password: 'SuperSecret123',
         passwordConfirm: 'SuperSecret123',
@@ -317,13 +348,12 @@ void main() {
       expect(find.text('注册并进入'), findsOneWidget);
       expect(find.text('昵称'), findsOneWidget);
       expect(find.text('确认密码'), findsOneWidget);
-      // 注册时可以选择用手机号还是用户名 ——
-      // 只支持手机号会让字母用户名（如管理员）完全无法注册。
-      //
-      // 用 findsWidgets 而不是 findsOneWidget：「手机号」会出现两次 ——
-      // 一次在选择器的选项上，一次在输入框的标签上。这是正常的。
-      expect(find.text('手机号'), findsWidgets);
+      // 注册时三个字段一起问：用户名（必填）+ 昵称 + 手机号（选填）。
+      // 用户名必填是因为它是提交分析时服务端认账号的依据 ——
+      // 以前"手机号 / 用户名二选一"，用手机号注册的账号在服务端
+      // 没有名字，提交分析只会收到「请先登录」。
       expect(find.text('用户名'), findsWidgets);
+      expect(find.text('手机号（选填）'), findsWidgets);
     });
 
     testWidgets('有账号时默认是登录模式', (tester) async {
@@ -361,22 +391,24 @@ void main() {
       await tester.pump();
 
       // 直接提交空表单。
-      // ⚠️ 必须先滚动 —— 加了"手机号/用户名"选择器之后表单变长，
-      //    提交按钮在小屏测试环境里会被挤到屏幕外，tap 不中。
+      // ⚠️ 必须先滚动 —— 注册表单有三个字段，提交按钮在小屏测试环境里
+      //    会被挤到屏幕外，tap 不中。
       await tester.ensureVisible(find.text('注册并进入'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('注册并进入'));
       await tester.pump();
 
-      expect(find.text('请输入手机号'), findsOneWidget);
+      // 用户名现在是必填 —— 它是提交分析时服务端认账号的依据
+      expect(find.text('请填写用户名'), findsOneWidget);
       expect(find.text('请填写昵称'), findsOneWidget);
       expect(find.text('密码至少 6 位'), findsOneWidget);
     });
 
-    testWidgets('切到用户名注册后校验规则也跟着变', (tester) async {
+    testWidgets('注册表单同时要用户名、昵称、手机号三项', (tester) async {
       // ⚠️ 这条守着真实缺陷：
-      //    登录/注册框原本只认 11 位手机号，导致字母用户名
-      //    （如管理员 MazingLIU）完全无法登录。
+      //    注册表单原本是"手机号 / 用户名"二选一。用手机号注册的账号
+      //    在服务端没有名字，提交分析只会收到「请先登录」——
+      //    而用户明明已经登录。一个身份分两种是问题的源头。
       await tester.pumpWidget(MaterialApp(
         home: LoginPage(
           auth: newAuth(),
@@ -386,17 +418,70 @@ void main() {
       ));
       await tester.pump();
 
-      await tester.tap(find.text('用户名'));
-      await tester.pumpAndSettle();
+      expect(find.text('用户名'), findsWidgets);
+      expect(find.text('昵称'), findsWidgets);
+      expect(find.text('手机号（选填）'), findsWidgets);
+      // 二选一的切换器必须消失
+      expect(find.text('手机号'), findsNothing);
+      expect(find.byType(SegmentedButton<bool>), findsNothing);
+    });
 
-      // 提交空表单，此时提示应当是"用户名"而不是"手机号"
+    testWidgets('手机号留空不拦，填了才校验', (tester) async {
+      // 手机号是选填：留空应当放行（错误出现在别的字段上），
+      // 填了非法值才报错。这两件事必须分开。
+      await tester.pumpWidget(MaterialApp(
+        home: LoginPage(
+          auth: newAuth(),
+          onLoggedIn: () {},
+          initialRegisterMode: true,
+        ),
+      ));
+      await tester.pump();
+
       await tester.ensureVisible(find.text('注册并进入'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('注册并进入'));
       await tester.pump();
 
-      expect(find.text('请输入用户名'), findsOneWidget);
-      expect(find.text('请输入手机号'), findsNothing);
+      expect(find.text('请输入 11 位手机号'), findsNothing,
+          reason: '手机号留空不该报格式错');
+    });
+
+    testWidgets('登录框对字母用户名与手机号都不拦', (tester) async {
+      // ⚠️ 这条守着真实缺陷：
+      //    登录框原本只认 11 位手机号，导致字母用户名
+      //    （如管理员 MazingLIU）完全无法登录。
+      //
+      // 登录模式下不做格式校验 —— 账号可能是手机号也可能是用户名，
+      // 在这里猜类型只会把合法输入挡在门外。
+      await tester.pumpWidget(MaterialApp(
+        home: LoginPage(
+          auth: newAuth(),
+          onLoggedIn: () {},
+          initialRegisterMode: false,   // 登录模式
+        ),
+      ));
+      await tester.pump();
+
+      final field = find.byType(TextFormField).first;
+
+      for (final id in ['MazingLIU', '13800138000']) {
+        await tester.enterText(field, id);
+        await tester.pump();
+        expect(find.text('请输入 11 位手机号'), findsNothing,
+            reason: '「$id」不该被格式校验拦住');
+        expect(find.text('用户名需 2–24 位，可用字母、数字、下划线'), findsNothing,
+            reason: '「$id」不该被格式校验拦住');
+      }
+
+      // 留空才提示，且提示要说清两种都认
+      await tester.enterText(field, '');
+      await tester.pump();
+      await tester.ensureVisible(find.text('登录'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('登录'));
+      await tester.pump();
+      expect(find.text('请输入手机号或用户名'), findsOneWidget);
     });
 
     testWidgets('提示账号仅存本机', (tester) async {

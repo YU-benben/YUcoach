@@ -112,13 +112,16 @@ class LocalUser {
     int? age,
     String? avatarFile,
     String? phone,
+    String? username,
     bool clearAge = false,
     bool clearAvatarFile = false,
   }) =>
       LocalUser(
         userId: userId,
         phone: phone ?? this.phone,
-        username: username,
+        // 用户名可以被**补上**（老账号用手机号注册，username 是空的），
+        // 所以这里要能改 —— 它是提交分析时服务端认账号的依据。
+        username: username ?? this.username,
         name: name ?? this.name,
         teamId: teamId,
         passwordSalt: passwordSalt,

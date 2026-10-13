@@ -25,7 +25,13 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
+
+  /// 登录用：手机号**或**用户名，一个框两种都认。
   final _account = TextEditingController();
+
+  /// 注册用：三个独立字段。见下面 _registerMode 的说明。
+  final _regUsername = TextEditingController();
+  final _regPhone = TextEditingController();
   final _name = TextEditingController();
   final _password = TextEditingController();
   final _passwordConfirm = TextEditingController();
@@ -35,15 +41,11 @@ class _LoginPageState extends State<LoginPage> {
   bool _obscure = true;
   String? _error;
 
-  /// 注册时用哪种标识。
-  ///
-  /// 默认手机号 —— 大多数教练用手机号注册更自然（记得住）。
-  /// 用户名作为备选，给没有手机号或不想绑手机号的用户。
-  bool _useUsername = false;
-
   @override
   void dispose() {
     _account.dispose();
+    _regUsername.dispose();
+    _regPhone.dispose();
     _name.dispose();
     _password.dispose();
     _passwordConfirm.dispose();
@@ -57,8 +59,12 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _busy = true);
     final result = _registerMode
         ? await widget.auth.register(
-            phone: _useUsername ? '' : _account.text,
-            username: _useUsername ? _account.text : '',
+            // 用户名必填：它是**服务端身份**，提交分析时要用它认账号、
+            // 扣额度。以前这里允许"手机号或用户名二选一"，
+            // 结果用手机号注册的账号在服务端没有名字 —— 提交分析时
+            // 只会收到一句「请先登录」，而用户明明已经登录。
+            username: _regUsername.text,
+            phone: _regPhone.text,
             name: _name.text,
             password: _password.text,
             passwordConfirm: _passwordConfirm.text,
@@ -78,24 +84,31 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  /// 账号输入框的校验。
+  /// 登录框的校验：**不做格式校验**。
   ///
-  /// 登录时**不做格式校验** —— 因为账号可能是手机号也可能是用户名，
-  /// 而两种格式差别很大。在这里猜类型只会把合法输入挡在门外
-  /// （比如用户名 `MazingLIU` 会被"请输入 11 位手机号"拦住）。
+  /// 因为账号可能是手机号也可能是用户名，两种格式差别很大。
+  /// 在这里猜类型只会把合法输入挡在门外（比如用户名 `MazingLIU`
+  /// 会被"请输入 11 位手机号"拦住）。
   /// 真正的判定交给 AuthService.login()，它会两种都比对一遍。
-  String? _validateAccount(String? v) {
-    final s = (v ?? '').trim();
-    if (s.isEmpty) return _useUsername ? '请输入用户名' : '请输入手机号';
-    if (_registerMode) {
-      if (_useUsername) {
-        return AuthService.isValidUsername(s)
-            ? null
-            : '用户名需 2–24 位，可用字母、数字、下划线';
-      }
-      return AuthService.isValidPhone(s) ? null : '请输入 11 位手机号';
-    }
+  String? _validateLoginId(String? v) {
+    if ((v ?? '').trim().isEmpty) return '请输入手机号或用户名';
     return null;
+  }
+
+  /// 注册时的用户名。它是**服务端身份**，所以规则与服务端一致（2–24 位）。
+  String? _validateUsername(String? v) {
+    final s = (v ?? '').trim();
+    if (s.isEmpty) return '请填写用户名';
+    return AuthService.isValidUsername(s)
+        ? null
+        : '用户名需 2–24 位，可用字母、数字、下划线';
+  }
+
+  /// 注册时的手机号。选填 —— 但填了就必须合法。
+  String? _validateOptionalPhone(String? v) {
+    final s = (v ?? '').trim();
+    if (s.isEmpty) return null;
+    return AuthService.isValidPhone(s) ? null : '请输入 11 位手机号';
   }
 
   @override
@@ -144,60 +157,62 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                   const SizedBox(height: 32),
 
-                  // 注册时先选"用手机号还是用户名"。
-                  // 登录时不显示 —— 一个输入框两种都认，让用户先选类型是多余的。
+                  // 注册与登录的字段不同，这是刻意的。
+                  //
+                  // 注册要一次问清「用户名 + 昵称 + 手机号」三项：
+                  //   用户名  服务端的身份，提交分析时用来认账号、扣额度
+                  //   昵称    界面上显示的名字
+                  //   手机号  选填，方便日后找回账号
+                  //
+                  // ⚠️ 以前这里是个"手机号 / 用户名"二选一的切换。
+                  //    结果是：用手机号注册的账号在服务端没有名字，
+                  //    提交分析时收到「请先登录」——而用户明明登录了。
+                  //    一个身份分两种，是问题的源头。
                   if (_registerMode) ...[
-                    SegmentedButton<bool>(
-                      segments: const [
-                        ButtonSegment(
-                          value: false,
-                          label: Text('手机号'),
-                          icon: Icon(Icons.phone_outlined, size: 16),
-                        ),
-                        ButtonSegment(
-                          value: true,
-                          label: Text('用户名'),
-                          icon: Icon(Icons.badge_outlined, size: 16),
-                        ),
-                      ],
-                      selected: {_useUsername},
-                      onSelectionChanged: (s) => setState(() {
-                        _useUsername = s.first;
-                        _error = null;
-                      }),
+                    TextFormField(
+                      controller: _regUsername,
+                      decoration: const InputDecoration(
+                        labelText: '用户名',
+                        helperText: '登录用，也是电脑端记账的依据',
+                        prefixIcon: Icon(Icons.badge_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: _validateUsername,
                     ),
                     const SizedBox(height: 16),
-                  ],
-
-                  TextFormField(
-                    controller: _account,
-                    keyboardType: _useUsername
-                        ? TextInputType.text
-                        : TextInputType.phone,
-                    decoration: InputDecoration(
-                      labelText: _useUsername ? '用户名' : '手机号',
-                      helperText: !_registerMode
-                          ? '手机号或用户名都可以'
-                          : null,
-                      prefixIcon: Icon(_useUsername
-                          ? Icons.badge_outlined
-                          : Icons.phone_outlined),
-                      border: const OutlineInputBorder(),
-                    ),
-                    validator: _validateAccount,
-                  ),
-                  const SizedBox(height: 16),
-
-                  if (_registerMode) ...[
                     TextFormField(
                       controller: _name,
                       decoration: const InputDecoration(
                         labelText: '昵称',
+                        helperText: '界面上显示的名字',
                         prefixIcon: Icon(Icons.person_outline),
                         border: OutlineInputBorder(),
                       ),
                       validator: (v) =>
                           (v ?? '').trim().isEmpty ? '请填写昵称' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _regPhone,
+                      keyboardType: TextInputType.phone,
+                      decoration: const InputDecoration(
+                        labelText: '手机号（选填）',
+                        helperText: '只用来日后找回账号，不填也能用',
+                        prefixIcon: Icon(Icons.phone_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: _validateOptionalPhone,
+                    ),
+                    const SizedBox(height: 16),
+                  ] else ...[
+                    TextFormField(
+                      controller: _account,
+                      decoration: const InputDecoration(
+                        labelText: '手机号或用户名',
+                        prefixIcon: Icon(Icons.account_circle_outlined),
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: _validateLoginId,
                     ),
                     const SizedBox(height: 16),
                   ],

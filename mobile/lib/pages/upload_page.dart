@@ -510,9 +510,8 @@ class UploadPageState extends State<UploadPage> implements Refreshable {
     // ---- 账号检查（放在上传之前）----
     //
     // 提交分析时服务端要求带 username 来认账号、扣额度。
-    // 若账号是**用手机号注册**的，LocalUser.username 是空的，
-    // 服务端就会回「请先登录」——而用户明明已经登录了，
-    // 那句话完全指不出问题在哪。
+    // 新注册的账号都有用户名；这里拦的是**老账号** ——
+    // 它们是在"手机号 / 用户名二选一"那版注册的，可能没有用户名。
     //
     // ⚠️ 必须在上传**之前**拦：否则用户白等一次几百 MB 的上传
     //    才被告知账号不能用。
@@ -521,12 +520,12 @@ class UploadPageState extends State<UploadPage> implements Refreshable {
       setState(() {
         _saving = false;
         _phase = _Phase.failed;
-        _analysisError = '当前账号没有用户名，无法提交分析';
+        _analysisError = '这个账号还没有用户名，暂时无法提交分析';
         _analysisHint =
             '分析要在电脑上排队执行，服务端需要一个用户名来记账。'
-            '你是用手机号注册的，所以缺这一项。'
-            '请退出后用「用户名」方式重新注册（登录页可切换）。'
-            '这次的记录已存在本机，换账号后仍能在「数据」里看到。';
+            '你的账号是早期用手机号注册的，缺这一项。'
+            '请到「我的 → 编辑资料」补一个用户名，回来后即可提交。'
+            '这次的记录已存在本机，补完用户名后仍能在「数据」里看到。';
       });
       await widget.sessions.markFailed(
           record.sessionId, '账号没有用户名，未提交分析');
