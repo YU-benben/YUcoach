@@ -45,6 +45,19 @@ def test_model_version_comes_from_sequence():
     assert v["model_version"] == "rtmpose-halpe26 0.0.16"
 
 
+def test_model_config_distinguishes_weights_resolution_and_rtm_mode():
+    configs = ["weights=yolov8n-pose.pt; imgsz=960",
+               "weights=yolov8s-pose.pt; imgsz=960",
+               "weights=yolov8n-pose.pt; imgsz=1280",
+               "mode=lightweight", "mode=balanced"]
+    versions = [build_versions(PoseSequence(
+        estimator_name="pose", estimator_version="1", model_config=c
+    ))["model_version"] for c in configs]
+    assert len(set(versions)) == len(configs)
+    for config, version in zip(configs, versions):
+        assert config in version
+
+
 def test_switching_estimator_changes_model_version():
     """
     换提取器，报告里的 model_version 必须跟着变。

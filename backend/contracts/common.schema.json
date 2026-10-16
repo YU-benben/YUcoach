@@ -21,7 +21,8 @@
         "acceleration",
         "transition",
         "max_velocity",
-        "deceleration"
+        "deceleration",
+        "whole_run"
       ],
       "description": "运动阶段"
     },

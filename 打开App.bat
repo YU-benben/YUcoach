@@ -38,12 +38,11 @@ echo.
 
 rem --------------------------------------------------------------------
 rem  Interpreter selection: prefer the project-local .venv
-rem  (Python 3.13 + CUDA torch).
+rem  (Python 3.13; GPU optional for experimental inference).
 rem
 rem  Use an explicit path instead of a bare "python": a bare name follows
 rem  PATH, so after uninstalling or replacing a Python installation it can
-rem  silently resolve to a different interpreter - one without CUDA.
-rem  Symptom: pose extraction gets ~60x slower and nothing reports an error.
+rem  silently resolve to a different interpreter with missing dependencies.
 rem --------------------------------------------------------------------
 set "YUCOACH_PY=%~dp0.venv\Scripts\python.exe"
 
@@ -62,12 +61,9 @@ echo   Rebuild it with:
 echo.
 echo       py -3.13 -m venv --copies .venv
 echo       .venv\Scripts\python.exe -m pip install -r requirements.txt
-echo       .venv\Scripts\python.exe -m pip install torch torchvision ^
-echo           --index-url https://download.pytorch.org/whl/cu126
 echo.
-echo   See the README section "Environment" for details.
-echo   NOTE: torch MUST come from the official PyTorch index above.
-echo         The PyPI wheel is CPU-only and runs about 60x slower.
+echo   See README.md for setup and optional GPU dependencies.
+echo   Manual contact timing does not run a pose model.
 echo.
 set "RC=1"
 

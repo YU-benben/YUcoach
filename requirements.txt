@@ -1,60 +1,30 @@
-# YUcoach 分析引擎依赖
-#
-# ⚠️ torch / torchvision 不在此文件里 —— 它们必须从 PyTorch 官方源装
-#    （PyPI 上的是 CPU 版，装完不报错、只是慢 60 倍）。见 README「前置」。
-#
-# 重建环境：
-#     py -3.13 -m venv --copies .venv
-#     .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-#     .\.venv\Scripts\python.exe -m pip install torch==2.14.1 torchvision==0.29.1 ^
-#         --index-url https://download.pytorch.org/whl/cu126
-#
-# ⚠️ 不要装 jsonschema。装了会让契约门 G2 改走另一条校验路径
-#    （scripts/check_contracts.py 第 549 行），而项目用的是内置 MiniValidator。
-#
-# 版本锁定于 2026-10-11（Python 3.13.13 / RTX 4060 Ti / CUDA 12.6）。
+# YUcoach 完整开发环境依赖；现有锁定版本保持不变（2026-10-16文档复核）。
+# 原锁定环境为 Windows / Python 3.13；新机器需验证轮子兼容性。
+# 默认人工计时不运行姿态模型、不要求GPU推理。
+# ultralytics会依赖torch；NVIDIA构建请按PyTorch官网选择，安装后实际检查CUDA。
+# 不保证PyPI在所有平台都是CPU版，也不使用开发机耗时作为通用性能承诺。
+# ONNX Runtime GPU与CPU包不要同时安装；GPU需匹配CUDA/cuDNN。
+# 当前GPU锁定适配开发机CUDA12；CPU环境应另建并验证依赖方案。
+# 契约门默认支持内置MiniValidator；安装jsonschema可能改变校验路径，应完整回归。
+# 重建：py -3.13 -m venv --copies .venv
+#       .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+# 部署与边界见README及docs/10-工程规范与验收.md。
 
-# ---- 推理与姿态 ----
 ultralytics==8.4.175
 mediapipe==1.1.0
 onnx==1.23.2
 rtmlib==0.0.16
 opencv-python==5.0.0.93
 opencv-contrib-python==5.0.0.93
-
-# onnxruntime：装了 GPU 版就不要再装 CPU 版，两者互斥（同一个 import 名）。
-#
-# ⚠️ 版本必须与 CUDA 匹配，否则 CUDA provider **创建失败并静默退回 CPU**
-#    （只在日志里报一句，表现为"分析莫名其妙很慢"）：
-#
-#        onnxruntime-gpu 1.31  要 CUDA 13 + cuDNN 9   ❌ 本机是 CUDA 12.6
-#        onnxruntime-gpu 1.22  要 CUDA 12 + cuDNN 9   ✅ 用这个
-#
-# ✅ 不需要单独安装 CUDA Toolkit —— **torch 自带 CUDA 运行库**
-#    （cublasLt64_12.dll / cudnn64_9.dll 等，在 torch/lib 下）。
-#    代码里已把 torch/lib 前置到 DLL 搜索路径，
-#    见 backend/analysis/pose_estimator_rtm.py 的 _prepare_cuda_dlls()。
-#    详见 docs/14 §9.4。
-#
-#    想省事也可以装 CPU 版（rtm 会慢约 4 倍，45 秒 vs 12 秒）：
-#        .\.venv\Scripts\python.exe -m pip install onnxruntime==1.22.0
 onnxruntime-gpu==1.22.0
-
-# ---- 数值与图像 ----
 numpy==2.5.4
 scipy==1.18.1
 pillow==12.3.0
 matplotlib==3.11.2
-
-# ---- 报告与文档生成 ----
 python-docx==1.2.0
 lxml==6.1.3
 PyYAML==6.0.3
-
-# ---- 服务端与工具 ----
 requests==2.34.2
 psutil==7.2.2
 tqdm==4.70.1
-
-# ---- 测试 ----
 pytest==9.1.1

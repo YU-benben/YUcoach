@@ -1,15 +1,11 @@
 {
   "_comment": [
-    "模型清单。",
-
-    "为什么需要这个文件：",
-    "  模型是可以替换的（微调后换文件即可），但换完之后没人知道",
-    "  差别在哪。这份清单记录每个模型的身份、验证结果和已知缺陷，",
-    "  让'换模型'这件事可追溯 —— 尤其是对拍时要知道两边是不是同一个模型。",
-
-    "契约里的 versions.model_version 应当填这里的 model_version。"
+    "历史模型资产与对拍清单；2026-10-16复核。",
+    "active记录早期YOLO默认资产，不代表App当前默认分析模式。",
+    "当前App默认manual-contact 1.0.0人工计时；实验模式支持YOLO多权重及RTMPose三档。",
+    "报告versions.model_version取实际运行配置，不直接复制active.model_version。",
+    "权重和对拍文件在忽略的缓存中，新克隆可能需要重新下载/导出。"
   ],
-
   "active": {
     "model_version": "yolov8n-pose-coco-official",
     "base_model": "yolov8n-pose",
@@ -18,7 +14,6 @@
     "keypoint_format": "coco17",
     "keypoint_count": 17,
     "provides_foot_keypoints": false,
-
     "artifacts": {
       "pytorch": {
         "file": ".cache/models/yolov8n-pose.pt",
@@ -43,24 +38,21 @@
         "used_by": "仅用于对拍，不用于部署"
       }
     },
-
     "verification": {
       "method": "端到端对拍：同一批真实视频帧，用完整 Ultralytics 流程（含 NMS 与后处理）分别跑 .pt 与 .onnx，比较最终 17 个关键点的像素坐标",
-      "script": "scripts/verify_onnx_parity.py",
-      "benchmark_script": "scripts/export_pose_onnx.py",
+      "script": "scripts/pose/verify_onnx_parity.py",
+      "benchmark_script": "scripts/pose/export_pose_onnx.py",
       "sample": "samples/videos/训练素材刘珉宇.mp4，均匀取 5 帧",
-
       "onnx_640": {
         "verdict": "一致",
         "max_pixel_diff": 0.58,
         "frames_compared": 5,
         "note": "亚像素级，完全可忽略"
       },
-
       "onnx_960": {
         "verdict": "可接受",
         "max_pixel_diff": 8.78,
-        "mean_pixel_diff": 1.30,
+        "mean_pixel_diff": 1.3,
         "frames_compared": 6,
         "note": [
           "差异与关键点的网络深度和置信度强相关：",
@@ -75,7 +67,6 @@
         ]
       }
     },
-
     "speed": {
       "_comment": "CPU 上的数字。手机有 NPU/GPU，通常更快，但必须真机实测。",
       "cpu_onnx_640_ms_per_frame": 22.7,
@@ -88,13 +79,11 @@
         "onnx_960": 63
       }
     },
-
     "known_issues": [
       "蹲踞式起跑（各就位）时混淆手臂与腿 —— 衍生足部点会落到起跑器上，而所有关键点仍报告可见。教训：覆盖率不等于准确率。",
       "COCO-17 没有脚跟与脚尖，足部点由小腿方向旋转 90° 几何推导，蹬离瞬间（踝背屈 120°+）误差最大。这是触地/腾空时间不可靠的根因。",
       "模型有约 3 像素的关键点抖动，深层关节（踝）更明显。"
     ],
-
     "candidates_for_replacement": [
       {
         "name": "自采短跑素材微调版",

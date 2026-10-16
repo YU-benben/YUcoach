@@ -31,7 +31,7 @@ from .metrics import MetricContext, MetricResult
 
 # 规则版本。改动了判据或处方，必须递增 ——
 # 否则无法回答"为什么同样的数据这次结论不一样"。
-RULE_VERSION = "0.2.0"
+RULE_VERSION = "0.3.0"
 
 
 @dataclass
@@ -234,14 +234,13 @@ def _usable_entry(
     三道检查，任一不通过就不做偏差判定：
       1. 条目不存
       2. 出处为空（loader 已经拦过一道，这里是运行时兜底）
-      3. 相位冲突 —— whole_run 的条目可以用在任何阶段，
-         但具体阶段的条目只能用在对应阶段
+      3. 相位冲突 —— 全程与阶段的参考不得互相替代
     """
     if entry is None:
         return False
     if not entry.source_locator:
         return False
-    if entry.phase != "whole_run" and entry.phase != phase:
+    if entry.phase != phase:
         return False
     return True
 
@@ -272,20 +271,40 @@ def evaluate_rules(
         # 标量指标只有一个值，用规则声明的相位；
         # 按相位统计的指标从 aggregate 里展开。
         phase_values = _extract_phase_values(metric, rule, ctx)
+        if not phase_values:
+            note = "测量阶段或完整测量窗口未确认：仅展示测量值，不作偏差判断。"
+            if note not in (metric.reliability_note or ""):
+                metric.reliability_note = ((metric.reliability_note or "") + " " + note).strip()
 
         for phase, value in phase_values.items():
+            if rule.phase is not None and phase != rule.phase:
+                continue
             entry = lib.lookup(
                 metric_id=rule.metric_id,
                 view=ctx.view,
                 phase=phase,
+                gender=ctx.athlete_gender,
+                event=ctx.athlete_event,
+                level=ctx.athlete_level,
+                age=ctx.athlete_age,
+                window=metric.reference_window,
+                running_condition=ctx.running_condition,
+                step_number=metric.step_number,
+                load_protocol=ctx.load_protocol,
             )
             if not _usable_entry(entry, ctx, phase):
+                note = "参考条件未匹配或存在多个来源：仅展示测量值，不作正常或异常判断。"
+                if note not in (metric.reliability_note or ""):
+                    metric.reliability_note = ((metric.reliability_note or "") + " " + note).strip()
                 continue
 
             # 需要 low/high 才能做区间判断。
             # 只有 mean/sd 的条目在本版本不做判定 ——
             # 标准化偏离（z 分数）留待有足够样本时再启用。
             if entry.low is None or entry.high is None:
+                note = "参考文献仅提供描述统计，未提供可用于本规则的上下限；不作偏差判断。"
+                if note not in (metric.reliability_note or ""):
+                    metric.reliability_note = ((metric.reliability_note or "") + " " + note).strip()
                 continue
 
             deviates, deviation_text = _check_deviation(
@@ -333,11 +352,10 @@ def _extract_phase_values(
     if out:
         return out
 
-    # 标量指标：用规则声明的相位；没声明就按第一个检测到的相位
-    phase = rule.phase
-    if phase is None:
-        phase = "whole_run"
-    return {phase: float(metric.value)}
+    # 规则需要的阶段不能反过来当成测量值的阶段。
+    if metric.reference_phase is None:
+        return {}
+    return {metric.reference_phase: float(metric.value)}
 
 
 def _check_deviation(

@@ -132,6 +132,7 @@ def _good_entry(**over) -> dict:
         # 测量窗口。**必填** —— 缺了就拒绝加载，因为无法判断
         # 这条数值覆盖的是"一段时期的均值"还是"某一个瞬间"。
         "window": "whole_run",
+        "running_condition": "unloaded",
     }
     e.update(over)
     return e
@@ -333,19 +334,26 @@ def test_pending_entries_are_recorded_not_loaded(tmp_standards):
 # 查找
 # ---------------------------------------------------------------------------
 
+def _lookup(lib, metric_id, view, phase, **kwargs):
+    query = dict(gender="male", level="elite", event="100m",
+                 window="whole_run", running_condition="unloaded")
+    query.update(kwargs)
+    return lib.lookup(metric_id, view, phase, **query)
+
+
 def test_lookup_requires_matching_view(tmp_standards):
     """视角不匹配时必须查不到 —— 不能退回别的视角的值。"""
     d = tmp_standards([_good_entry()])
     lib = load_standards(d)
 
-    assert lib.lookup("step_frequency", "side", "whole_run") is not None
-    assert lib.lookup("step_frequency", "front", "whole_run") is None
-    assert lib.lookup("step_frequency", "back", "whole_run") is None
+    assert _lookup(lib, "step_frequency", "side", "whole_run") is not None
+    assert _lookup(lib, "step_frequency", "front", "whole_run") is None
+    assert _lookup(lib, "step_frequency", "back", "whole_run") is None
 
 
-def test_lookup_falls_back_to_whole_run(tmp_standards):
+def test_lookup_does_not_fall_back_to_whole_run(tmp_standards):
     """
-    phase 精确匹配失败时，可以退回 whole_run（全程平均值）。
+    全程参考不能用来判断局部阶段。
 
     但**不是**退回别的具体阶段 —— 加速段和途中跑的标准值
     含义相反，互相替代会造成系统性误报。
@@ -353,9 +361,71 @@ def test_lookup_falls_back_to_whole_run(tmp_standards):
     d = tmp_standards([_good_entry(phase="whole_run")])
     lib = load_standards(d)
 
-    # 任意具体阶段都能用全程值
-    assert lib.lookup("step_frequency", "side", "max_velocity") is not None
-    assert lib.lookup("step_frequency", "side", "acceleration") is not None
+    assert _lookup(lib, "step_frequency", "side", "max_velocity") is None
+    assert _lookup(lib, "step_frequency", "side", "acceleration") is None
+
+
+@pytest.mark.parametrize("query", [
+    {"level": "amateur"}, {"level": None}, {"gender": "female"},
+    {"gender": None}, {"event": "200m"}, {"event": None},
+    {"window": "event_mean"}, {"window": "unspecified"},
+    {"window": None}, {"running_condition": "resisted"},
+    {"running_condition": None}, {"step_number": 1},
+    {"age": True}, {"age": "25"}, {"age": float("nan")},
+])
+def test_lookup_rejects_mismatched_or_unknown_conditions(tmp_standards, query):
+    lib = load_standards(tmp_standards([_good_entry()]))
+    assert _lookup(lib, "step_frequency", "side", "whole_run", **query) is None
+
+
+def test_old_entries_are_loaded_but_not_used_without_condition(tmp_standards):
+    entry = _good_entry()
+    entry.pop("running_condition")
+    lib = load_standards(tmp_standards([entry]))
+    assert len(lib.entries) == 1
+    assert _lookup(lib, "step_frequency", "side", "whole_run") is None
+
+
+def test_age_restriction_and_duplicate_sources(tmp_standards):
+    entry = _good_entry(population={"gender": "male", "level": "elite",
+                                   "event": "100m", "age_range": "22-29"})
+    lib = load_standards(tmp_standards([entry]))
+    for age in [None, 21, 30]:
+        assert _lookup(lib, "step_frequency", "side", "whole_run", age=age) is None
+    assert _lookup(lib, "step_frequency", "side", "whole_run", age=22)
+    assert _lookup(lib, "step_frequency", "side", "whole_run", age=29)
+    lib.entries *= 2
+    assert _lookup(lib, "step_frequency", "side", "whole_run", age=25) is None
+
+
+def test_step_specific_reference_cannot_match_average_or_other_step(tmp_standards):
+    lib = load_standards(tmp_standards([
+        _good_entry(window="single_event", step_number=1)]))
+    for step in [None, 2, True]:
+        assert _lookup(lib, "step_frequency", "side", "whole_run",
+                       window="single_event", step_number=step) is None
+    assert _lookup(lib, "step_frequency", "side", "whole_run",
+                   window="single_event", step_number=1)
+
+
+def test_resistance_load_protocol_must_match(tmp_standards):
+    lib = load_standards(tmp_standards([
+        _good_entry(running_condition="resisted", load_protocol="vdec_20pct")]))
+    for protocol in [None, "vdec_10pct"]:
+        assert _lookup(lib, "step_frequency", "side", "whole_run",
+                       running_condition="resisted", load_protocol=protocol) is None
+    assert _lookup(lib, "step_frequency", "side", "whole_run",
+                   running_condition="resisted", load_protocol="vdec_20pct")
+
+
+@pytest.mark.parametrize("fields", [
+    {"step_number": True}, {"step_number": 0}, {"step_number": 1},
+    {"running_condition": "heavy"}, {"running_condition": "resisted"},
+    {"running_condition": "unloaded", "load_protocol": "vdec_20pct"},
+])
+def test_invalid_step_or_load_metadata_rejected(tmp_standards, fields):
+    lib = load_standards(tmp_standards([_good_entry(**fields)]))
+    assert not lib.entries and lib.problems
 
 
 def test_lookup_does_not_cross_phases(tmp_standards):
@@ -375,8 +445,8 @@ def test_lookup_does_not_cross_phases(tmp_standards):
     lib = load_standards(d)
     assert lib.entries, f"测试数据本身应通过校验：{lib.problems}"
 
-    assert lib.lookup("trunk_lean", "side", "acceleration") is not None
-    assert lib.lookup("trunk_lean", "side", "max_velocity") is None, (
+    assert _lookup(lib, "trunk_lean", "side", "acceleration") is not None
+    assert _lookup(lib, "trunk_lean", "side", "max_velocity") is None, (
         "加速段的标准值不该被途中跑使用 —— 两者含义相反"
     )
 
@@ -480,10 +550,10 @@ def test_lookup_respects_level(tmp_standards):
     ])
     lib = load_standards(d)
 
-    elite = lib.lookup("step_frequency", "side", "whole_run", level="elite")
+    elite = _lookup(lib, "step_frequency", "side", "whole_run", level="elite")
     assert elite is not None and elite.mean == 270.0
 
-    college = lib.lookup("step_frequency", "side", "whole_run",
+    college = _lookup(lib, "step_frequency", "side", "whole_run",
                          level="college")
     assert college is not None and college.mean == 225.0
 

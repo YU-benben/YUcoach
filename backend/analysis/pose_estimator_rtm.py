@@ -107,6 +107,7 @@ class RtmPoseEstimator(PoseEstimator):
         from rtmlib import BodyWithFeet
 
         self.mode = mode
+        self.model_config = f"mode={mode}"
         self.backend = backend
         self.verbose = verbose
 
@@ -211,12 +212,20 @@ class RtmPoseEstimator(PoseEstimator):
         kp = np.asarray(keypoints, dtype=np.float64)
         sc = np.asarray(scores, dtype=np.float64)
         if kp.size == 0 or kp.shape[-2] != HALPE_KEYPOINT_COUNT:
+            if getattr(self, "target_lock", None) is not None:
+                self.target_lock.select(frame_bgr, frame_index, np.empty((0, 4)))
             return None
 
         h, w = frame_bgr.shape[:2]
 
         # 多人时选一个。rtmlib 不给人体框，所以用躯干高度当尺度。
-        pick = self._pick_person(kp, sc)
+        lock = getattr(self, "target_lock", None)
+        if lock is not None:
+            from .target_lock import keypoint_boxes
+            boxes = keypoint_boxes(kp, sc)
+            pick = lock.select(frame_bgr, frame_index, boxes)
+        else:
+            pick = self._pick_person(kp, sc)
         if pick is None:
             return None
 
@@ -236,7 +245,7 @@ class RtmPoseEstimator(PoseEstimator):
             halpe,
             frame_index=frame_index,
             person_conf=person_conf,
-            bbox=None,          # rtmlib 不返回人体框
+            bbox=tuple((boxes[pick] / [w, h, w, h]).clip(0, 1)) if lock is not None else None,
         )
 
     # ------------------------------------------------------------------
@@ -312,6 +321,7 @@ class RtmPoseEstimator(PoseEstimator):
         seq = PoseSequence(
             estimator_name=self.name,
             estimator_version=self.version,
+            model_config=self.model_config,
         )
         seq.notes.append(
             f"姿态模型 {self.name}（rtmlib {self.version}，{self.mode} 权重）"

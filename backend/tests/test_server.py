@@ -55,6 +55,7 @@ def server(tmp_path, monkeypatch):
     # 关键帧目录同样隔离
     monkeypatch.setattr(server_app, "KEYFRAMES_ROOT",
                         tmp_path / "keyframes")
+    monkeypatch.setattr(server_app, "DATASET_ROOT", tmp_path / "dataset")
     server_app.KEYFRAMES_ROOT.mkdir(parents=True, exist_ok=True)
 
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), server_app.Handler)
@@ -115,6 +116,162 @@ def _post(url: str, data: bytes, headers: dict | None = None) -> tuple[int, dict
 # ---------------------------------------------------------------------------
 # 健康检查
 # ---------------------------------------------------------------------------
+
+def test_manual_review_http_and_dataset(server, tmp_path):
+    from backend.tests.test_manual_timing import make_video, review
+    source = tmp_path / "source.avi"
+    make_video(source)
+    code, upload = _post(f"{server}/api/videos", source.read_bytes(), {"X-Filename": "source.avi"})
+    assert code == 201
+    video_id = upload["video_id"]
+    code, meta = _get(f"{server}/api/videos/{video_id}/metadata")
+    assert code == 200 and meta["fps"] == 240
+    with urllib.request.urlopen(f"{server}/api/videos/{video_id}/frames/96") as response:
+        assert response.headers["Content-Type"] == "image/jpeg"
+        assert response.read().startswith(b"\xff\xd8")
+    assert _get(f"{server}/api/videos/{video_id}/frames/9999")[0] == 400
+    params = {"username": "manualtester", "video_id": video_id,
+              "view": "side", "camera_followed": False,
+              "analysis_mode": "manual_side_v1", "manual_review": review(),
+              "target_selection": {"protocol": "athlete_lock_v1", "frame": 0, "end_frame": 143,
+                                   "bbox": [.1,.1,.3,.9], "confirmed": True}}
+    params["manual_review"]["all_contacts_confirmed"] = False
+    code, _ = _post(f"{server}/api/analyze", json.dumps(params).encode())
+    assert code == 400
+    assert server_app.ACCOUNTS.get("manualtester").used_this_month == 0
+    params["manual_review"] = review()
+    code, body = _post(f"{server}/api/analyze", json.dumps(params).encode())
+    assert code == 202, body
+    job = server_app.JOBS.get(body["job_id"])
+    deadline = time.time() + 10
+    while job.status not in ("done", "failed") and time.time() < deadline:
+        time.sleep(.01)
+    assert job.status == "done", job.error
+    archive = server_app.DATASET_ROOT / job.job_id
+    assert (archive / "video.avi").read_bytes() == source.read_bytes()
+    assert json.loads((archive / "review.json").read_text(encoding="utf-8"))["review"] == review()
+    assert json.loads((archive / "review.json").read_text(encoding="utf-8"))["target_selection"] == params["target_selection"]
+    assert (archive / "report.json").is_file()
+    assert len(job.report["keyframes"]) == 6
+    assert server_app.ACCOUNTS.get("manualtester").used_this_month == 1
+
+
+@pytest.mark.parametrize("changes", [
+    {"frame": True}, {"frame": -1}, {"end_frame": 999},
+    {"confirmed": False}, {"bbox": [0,0,float("nan"),1]},
+    {"bbox": [1,1,0,0]},
+])
+def test_bad_target_selection_does_not_consume_quota(server, tmp_path, changes):
+    from backend.tests.test_manual_timing import make_video
+    source = tmp_path / "source.avi"
+    make_video(source)
+    code, upload = _post(f"{server}/api/videos", source.read_bytes(), {"X-Filename": "source.avi"})
+    assert code == 201
+    params = {"username": "targettester", "video_id": upload["video_id"],
+              "view": "side", "camera_followed": False,
+              "target_selection": {"protocol": "athlete_lock_v1", "frame": 0, "end_frame": 143,
+                                   "bbox": [.1,.1,.3,.9], "confirmed": True, **changes}}
+    code, body = _post(f"{server}/api/analyze", json.dumps(params).encode())
+    assert code == 400, body
+    assert server_app.ACCOUNTS.get("targettester").used_this_month == 0
+
+@pytest.mark.parametrize("options", [
+    {},
+    {"estimator": "yolo", "model": "yolov8s-pose.pt", "imgsz": 1280},
+    {"estimator": "rtm", "rtm_mode": "balanced"},
+])
+def test_model_selection_reaches_pipeline(server, monkeypatch, options):
+    from backend.analysis import analyze
+    from backend.analysis.pose_options import pose_options_from_params
+    received = {}
+
+    def fake_pipeline(**kwargs):
+        received.update(kwargs)
+        return {"versions": {"model_version": "test"}}
+
+    monkeypatch.setattr(analyze, "run_pipeline", fake_pipeline)
+    upload_code, upload = _post(f"{server}/api/videos", b"test" * 512,
+                                {"X-Filename": "test.mp4"})
+    assert upload_code == 201, upload
+    code, body = _post(f"{server}/api/analyze", json.dumps({
+        "username": "modeltester", "video_id": upload["video_id"], **options,
+    }).encode(), {"Content-Type": "application/json"})
+    assert code == 202, body
+    job = server_app.JOBS.get(body["job_id"])
+    deadline = time.time() + 5
+    while job.status not in ("done", "failed") and time.time() < deadline:
+        time.sleep(0.01)
+    assert job.status == "done", job.error
+    for key, value in pose_options_from_params(options).items():
+        assert received[key] == value
+
+
+@pytest.mark.parametrize("options", [
+    {"estimator": "unknown"}, {"model": "../../other.pt"},
+    {"imgsz": 641}, {"imgsz": 960.5}, {"imgsz": True},
+    {"rtm_mode": "unknown"},
+    {"estimator": "rtm", "model": "yolov8n-pose.pt"},
+])
+def test_invalid_model_options_do_not_consume_quota(server, options):
+    _register(server)
+    upload_code, upload = _post(f"{server}/api/videos", b"test" * 512,
+                                {"X-Filename": "test.mp4"})
+    assert upload_code == 201, upload
+    code, body = _post(f"{server}/api/analyze", json.dumps({
+        "username": _TEST_USER, "video_id": upload["video_id"], **options,
+    }).encode(), {"Content-Type": "application/json"})
+    assert code == 400, body
+    assert server_app.ACCOUNTS.get(_TEST_USER).used_this_month == 0
+
+
+@pytest.mark.parametrize("options", [
+    {"complete_run": "true"}, {"athlete_age": True}, {"athlete_age": -1},
+    {"athlete_age": float("nan")}, {"running_condition": "heavy"},
+    {"running_condition": "resisted"},
+    {"running_condition": "unloaded", "load_protocol": "vdec_20pct"},
+])
+def test_invalid_reference_options_do_not_consume_quota(server, options):
+    _register(server)
+    code, _ = _post(f"{server}/api/analyze", json.dumps({
+        "username": _TEST_USER, **options,
+    }).encode(), {"Content-Type": "application/json"})
+    assert code == 400
+    assert server_app.ACCOUNTS.get(_TEST_USER).used_this_month == 0
+
+
+@pytest.mark.parametrize("population,confirmed", [
+    ({}, False),
+    ({"gender": "female", "level": "amateur", "event": "200m"}, True),
+])
+def test_reference_options_reach_pipeline(server, monkeypatch, population, confirmed):
+    from backend.analysis import analyze
+    received = {}
+
+    def fake_pipeline(**kwargs):
+        received.update(kwargs)
+        return {}
+
+    monkeypatch.setattr(analyze, "run_pipeline", fake_pipeline)
+    code, upload = _post(f"{server}/api/videos", b"test" * 512,
+                          {"X-Filename": "test.mp4"})
+    assert code == 201
+    code, body = _post(f"{server}/api/analyze", json.dumps({
+        "username": "reftester", "video_id": upload["video_id"],
+        "athlete_age": 23, "running_condition": "resisted",
+        "load_protocol": "vdec_20pct", "complete_run": True, **population,
+    }).encode(), {"Content-Type": "application/json"})
+    assert code == 202
+    job = server_app.JOBS.get(body["job_id"])
+    deadline = time.time() + 5
+    while job.status not in ("done", "failed") and time.time() < deadline:
+        time.sleep(.01)
+    assert job.status == "done", job.error
+    assert received["population_confirmed"] is confirmed
+    assert received["athlete_age"] == 23
+    assert received["running_condition"] == "resisted"
+    assert received["load_protocol"] == "vdec_20pct"
+    assert received["complete_run"] is True
+
 
 def test_health_reports_engine_status(server):
     code, body = _get(f"{server}/api/health")

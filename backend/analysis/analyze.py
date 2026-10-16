@@ -47,7 +47,13 @@ from .video_io import estimate_camera_motion, iter_frames, read_video_info
 ProgressFn = Callable[[float, str], None]
 
 
-def _build_estimator(which: str, model_name: str, imgsz: int):
+def _build_estimator(
+    which: str,
+    model_name: str,
+    imgsz: int,
+    *,
+    rtm_mode: str = "lightweight",
+):
     """
     按名字构造姿态提取器。
 
@@ -69,7 +75,7 @@ def _build_estimator(which: str, model_name: str, imgsz: int):
         # 延迟导入：rtmlib 是换模型时的可选依赖，
         # 没装也不该影响默认路径（否则整个引擎都起不来）。
         from .pose_estimator_rtm import RtmPoseEstimator
-        return RtmPoseEstimator()
+        return RtmPoseEstimator(mode=rtm_mode)
     raise ValueError(
         f"未知的姿态提取器 '{which}'。可选：yolo（默认，无足部点）、"
         f"rtm（rtmlib Halpe26，含足部点）。"
@@ -85,6 +91,11 @@ def run_pipeline(
     event: str = "100m",
     level: str = "college",
     height_cm: float | None = None,
+    athlete_age: float | None = None,
+    running_condition: str | None = None,
+    load_protocol: str | None = None,
+    complete_run: bool = False,
+    population_confirmed: bool = False,
     view: str = "side",
     test_type: str = "acceleration",
     camera_distance_m: float | None = None,
@@ -96,6 +107,9 @@ def run_pipeline(
     model_name: str = "yolov8n-pose.pt",
     imgsz: int = 960,
     estimator: str = "yolo",
+    rtm_mode: str = "lightweight",
+    manual_review: dict | None = None,
+    target_selection: dict | None = None,
     max_frames: int | None = None,
     keyframe_dir: Path | str | None = None,
     keyframe_url_prefix: str = "keyframes",
@@ -137,50 +151,108 @@ def run_pipeline(
     say(f"视频 {info.resolution_label} {info.frame_count} 帧 "
         f"{info.duration_s:.1f} 秒，帧率校验 {info.fps_verification.status}")
 
-    # ---- 2. 镜头运动 ----
-    emit(0.08, "检测镜头运动")
-    motion_level, motion_shift, motion_notes = estimate_camera_motion(p)
-    for n in motion_notes:
-        say(n)
+    target = None
+    if target_selection is not None:
+        from .target_lock import validate_target
+        target = validate_target(target_selection, info.frame_count)
+        if view != "side" or camera_followed is not False:
+            raise ValueError("人物锁定首版仅支持固定侧面；请确认没有跟拍")
+        if max_frames is not None and target["end_frame"] >= max_frames:
+            raise ValueError("分析帧数上限未覆盖所选人物区间")
 
-    # ---- 3. 姿态提取（耗时最长，占整体 90% 以上）----
-    emit(0.12, "加载姿态模型")
-    est = _build_estimator(estimator, model_name, imgsz)
-    say(f"姿态提取器 {est.name}，推理设备 {getattr(est, 'device', '?')}")
-    if est.provides_foot_keypoints:
-        say("该模型提供实测足部关键点（heel/toe 不再几何推导）")
+    if manual_review is not None:
+        from .manual_timing import inspect_video, validate_review
+        from .pose_types import PoseSequence
+        from .phases import GaitEvents
+        from .reference_scale import ScaleEstimate
+        metadata = inspect_video(p)
+        labels = validate_review(manual_review, metadata, view=view, camera_followed=camera_followed)
+        if target is not None and any(not target["frame"] <= e["frame"] <= target["end_frame"] for e in labels):
+            raise ValueError("人工事件超出选定人物的分析区间")
+        fps = metadata["fps"]
+        info.fps_verified = fps
+        info.duration_s = metadata["frame_count"] / fps
+        info.fps_verification.verified = fps
+        info.fps_verification.status = "verified"
+        # No model selection, inferred feet, geometry, scale or inferred phase
+        # enters the manual timing path.
+        seq = PoseSequence(estimator_name="manual-contact", estimator_version="1.0.0")
+        events = GaitEvents(touchdowns=[e["frame"] for e in labels if e["type"] == "touchdown"],
+                            toe_offs=[e["frame"] for e in labels if e["type"] == "toe_off"],
+                            method="manual_side_v1")
+        scale = ScaleEstimate(method="none", valid_per_frame=False)
+        phases = []
+        motion_level, motion_shift = "fixed", 0.0
+        emit(.85, "按人工确认事件计算时间指标")
+    else:
+        # ---- 2. 镜头运动 ----
+        emit(0.08, "检测镜头运动")
+        motion_level, motion_shift, motion_notes = estimate_camera_motion(p)
+        for n in motion_notes:
+            say(n)
 
-    frames_iter = iter_frames(
-        p, end=None if max_frames is None else max_frames)
+        # ---- 3. 姿态提取（耗时最长，占整体 90% 以上）----
+        emit(0.12, "加载姿态模型")
+        est = _build_estimator(estimator, model_name, imgsz, rtm_mode=rtm_mode)
+        say(f"姿态提取器 {est.name}，推理设备 {getattr(est, 'device', '?')}")
+        if est.provides_foot_keypoints:
+            say("该模型提供实测足部关键点（heel/toe 不再几何推导）")
 
-    emit(0.20, "提取姿态")
-    seq = est.estimate_sequence(frames_iter)
-    say(f"姿态提取完成：{len(seq)} 帧")
+        frames_iter = iter_frames(
+            p, start=target["frame"] if target else 0,
+            end=target["end_frame"]+1 if target else max_frames)
 
-    # ---- 4. 参考尺度 ----
-    emit(0.75, "估计参考尺度")
-    # 采样若干帧用于分道线检测 —— 不必每帧都检，检测本身有开销，
-    # 而分道线是静态参照物，采样足够。
-    sample_idx = {
-        f.frame_index for f in seq.frames[::max(1, len(seq) // 20)]
-    }
-    sample_frames: dict = {}
-    for idx, bgr in iter_frames(
-            p, end=None if max_frames is None else max_frames):
-        if idx in sample_idx:
-            sample_frames[idx] = bgr
+        if target is not None:
+            from .target_lock import AthleteLock
+            est.target_lock = AthleteLock(target)
 
-    scale = estimate_reference_scale(
-        seq, athlete_height_cm=height_cm, frames_by_index=sample_frames)
-    say(f"参考尺度来源：{scale.method}")
+        emit(0.20, "提取姿态")
+        extraction_complete = False
+        try:
+            seq = est.estimate_sequence(frames_iter)
+            if target is not None:
+                expected = target["end_frame"] - target["frame"] + 1
+                if len(est.target_lock.records) != expected:
+                    raise ValueError("解码提前结束，未覆盖完整选人区间，不生成报告")
+            extraction_complete = True
+        finally:
+            if target is not None and keyframe_dir is not None:
+                import json
+                dest = Path(keyframe_dir)
+                dest.mkdir(parents=True, exist_ok=True)
+                (dest / "target_tracking.json").write_text(json.dumps({
+                    "selection": target, "method": "position_velocity_hsv_v1",
+                    "frames": est.target_lock.records,
+                    "status": "lost" if est.target_lock.failed else ("completed" if extraction_complete else "incomplete"),
+                }, ensure_ascii=False, indent=2), encoding="utf-8")
+        if target is not None:
+            seq.model_config += "; target_lock=position_velocity_hsv_v1"
+        say(f"姿态提取完成：{len(seq)} 帧")
 
-    # ---- 5. 事件与相位 ----
-    emit(0.85, "检测步态事件与相位")
-    fps = info.fps_verified or info.fps_declared or 30.0
-    events = detect_gait_events(seq, fps=fps)
-    phases, phase_notes = detect_phases(seq, fps=fps)
-    say(f"检出支撑中期 {len(events.midstances)} 次、"
-        f"着地 {len(events.touchdowns)} 次；划分相位 {len(phases)} 段")
+        # ---- 4. 参考尺度 ----
+        emit(0.75, "估计参考尺度")
+        # 采样若干帧用于分道线检测 —— 不必每帧都检，检测本身有开销，
+        # 而分道线是静态参照物，采样足够。
+        sample_idx = {
+            f.frame_index for f in seq.frames[::max(1, len(seq) // 20)]
+        }
+        sample_frames: dict = {}
+        for idx, bgr in iter_frames(
+                p, end=None if max_frames is None else max_frames):
+            if idx in sample_idx:
+                sample_frames[idx] = bgr
+
+        scale = estimate_reference_scale(
+            seq, athlete_height_cm=height_cm, frames_by_index=sample_frames)
+        say(f"参考尺度来源：{scale.method}")
+
+        # ---- 5. 事件与相位 ----
+        emit(0.85, "检测步态事件与相位")
+        fps = info.fps_verified or info.fps_declared or 30.0
+        events = detect_gait_events(seq, fps=fps)
+        phases, phase_notes = detect_phases(seq, fps=fps)
+        say(f"检出支撑中期 {len(events.midstances)} 次、"
+            f"着地 {len(events.touchdowns)} 次；划分相位 {len(phases)} 段")
 
     # ---- 6. 组装报告 ----
     emit(0.88, "计算指标")
@@ -198,6 +270,11 @@ def run_pipeline(
         athlete_event=event,
         athlete_level=level,
         athlete_height_cm=height_cm,
+        athlete_age=athlete_age,
+        running_condition=running_condition,
+        load_protocol=load_protocol,
+        complete_run=complete_run and max_frames is None and target is None,
+        population_confirmed=population_confirmed,
         session_id=session_id or f"s_{p.stem}",
         team_id=team_id,
         test_type=test_type,
@@ -218,11 +295,31 @@ def run_pipeline(
         camera_motion_level=motion_level,
         camera_motion_shift=motion_shift,
     )
+    ctx.athlete_gender = gender if population_confirmed else None
+    ctx.athlete_event = event if population_confirmed else None
+    ctx.athlete_level = level if population_confirmed else None
+    ctx.athlete_age = athlete_age
+    ctx.running_condition = running_condition
+    ctx.load_protocol = load_protocol
+    ctx.complete_run = complete_run and max_frames is None and target is None
+    ctx.manual_events = labels if manual_review is not None else None
     metric_results = compute_all_metrics(ctx)
 
     # ---- 7. 关键帧图片 ----
     kf: list[dict] = []
-    if keyframe_dir is not None:
+    if keyframe_dir is not None and manual_review is not None:
+        from .manual_timing import read_frame
+        dest = Path(keyframe_dir)
+        dest.mkdir(parents=True, exist_ok=True)
+        # Show original event frames, never a guessed skeleton or angle.
+        for e in labels[:12]:
+            name = f"f{e['frame']:06d}_{e['type']}.jpg"
+            (dest / name).write_bytes(read_frame(p, e["frame"]))
+            kf.append({"frame_index": e["frame"], "event": e["type"],
+                       "side": "L" if e["side"] == "left" else "R",
+                       "phase": "whole_run", "annotations": [],
+                       "image_url": f"{keyframe_url_prefix}/{name}"})
+    if keyframe_dir is not None and manual_review is None:
         emit(0.94, "生成关键帧图")
         try:
             from .keyframes import render_keyframes
@@ -239,6 +336,12 @@ def run_pipeline(
 
     emit(0.97, "组装报告")
     report = build_report(inputs, ctx=ctx, keyframes=kf)
+    if target is not None:
+        previous_note = report["session"]["camera_motion"].get("note", "")
+        report["session"]["camera_motion"]["note"] = previous_note + (
+            f" 人工选定运动员及区间 {target['frame']}–{target['end_frame']} 帧。"
+            + ("人工计时，身份由标注者逐帧核对，未运行自动跟踪。" if manual_review is not None
+               else "采用位置、运动连续性与衣着直方图关联；不是身份识别认证。"))
 
     # ⚠️ 不要把耗时之类的服务端诊断信息塞进 report。
     #
@@ -271,16 +374,22 @@ def main() -> int:
              "rtm=rtmlib Halpe26（含实测趾尖/足跟，换它会改变数值结果）",
     )
     ap.add_argument("--max-frames", type=int, default=None)
+    ap.add_argument("--rtm-mode", default="lightweight",
+                    choices=["lightweight", "balanced", "performance"])
 
     ap.add_argument("--athlete-id", default="at_local")
     ap.add_argument("--athlete-name", default="未署名")
-    ap.add_argument("--gender", default="male", choices=["male", "female"])
-    ap.add_argument("--event", default="100m")
-    ap.add_argument("--level", default="college",
+    ap.add_argument("--gender", default=None, choices=["male", "female"])
+    ap.add_argument("--event", default=None)
+    ap.add_argument("--level", default=None,
                     choices=["elite", "sub_elite", "college",
                              "high_school", "amateur"])
     ap.add_argument("--height", type=float, default=None,
                     help="身高 cm。位移类指标需要它，或让分道线入镜")
+    ap.add_argument("--athlete-age", type=float, default=None)
+    ap.add_argument("--running-condition", choices=["unloaded", "resisted", "assisted"])
+    ap.add_argument("--load-protocol", default=None, help="具体负荷方案，与参考库标识一致")
+    ap.add_argument("--complete-run", action="store_true", help="确认素材涵盖完整专项距离")
 
     ap.add_argument("--view", default="side",
                     choices=["side", "front", "back"])
@@ -328,10 +437,15 @@ def main() -> int:
             video_path=args.video,
             athlete_id=args.athlete_id,
             athlete_name=args.athlete_name,
-            gender=args.gender,
-            event=args.event,
-            level=args.level,
+            gender=args.gender or "male",
+            event=args.event or "100m",
+            level=args.level or "college",
+            population_confirmed=all((args.gender, args.event, args.level)),
             height_cm=args.height,
+            athlete_age=args.athlete_age,
+            running_condition=args.running_condition,
+            load_protocol=args.load_protocol,
+            complete_run=args.complete_run,
             view=args.view,
             test_type=args.test_type,
             camera_distance_m=args.camera_distance,
@@ -343,6 +457,7 @@ def main() -> int:
             model_name=args.model,
             imgsz=args.imgsz,
             estimator=args.estimator,
+            rtm_mode=args.rtm_mode,
             max_frames=args.max_frames,
             progress=on_progress,
             log=lambda s: out(f"        {s}"),

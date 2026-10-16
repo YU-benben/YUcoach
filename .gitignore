@@ -1,8 +1,8 @@
 # .gitignore —— 明确哪些是生成物、哪些是源码
 #
 # 这个文件不只是给 git 看的，它同时也是"生成物清单"的文档：
-#   凡是本文件忽略的，都是可以删掉并重新生成的；
-#   凡是没被忽略的，删掉就会丢东西。
+#   忽略表示不提交，不表示可删除。私有原片、标注、账号和调研产物
+#   可能无法重建，清理前请先备份。
 #
 # 全部生成物都落在项目内（见 backend/paths.py），不散到项目外。
 
@@ -15,11 +15,11 @@ __pycache__/
 htmlcov/
 
 # ---- 项目生成物 ----
-# 模型权重、缓存、上传临时文件。删掉后首次运行会自动重建。
+# 模型权重、临时上传和账号；accounts.json及未归档上传不能自动重建。
 .cache/
 
 # 分析产物：报告 JSON、骨架视频、关键点 CSV
-# 这些是从 samples/videos/ 里的素材生成的，可以重新跑出来
+# 也可能包含唯一调研记录和人工复核证据，删除前需确认或备份
 output/
 
 # ---- ultralytics 的默认落点（防御性）----
@@ -77,47 +77,13 @@ Thumbs.db
 desktop.ini
 ~$*
 
-# ---- 明确【不】忽略的 ----
-# 下面这些看着像生成物但其实是源码或必需资产，显式保留：
-#
-#   mobile/lib/models/          契约生成的 Dart 模型。
-#                               虽然由 gen_models.py 生成，但它是 App 编译
-#                               必需的，且门禁 G2b 会校验它与契约同步 ——
-#                               必须入库，否则新克隆的仓库编译不过。
-#
-#   samples/pose_fixtures/      手机端姿态解析器的**跨语言对拍样本**。
-#                               由 scripts/pose/gen_pose_fixtures.py 生成，
-#                               约 7 MB。必须入库 —— 否则
-#                               mobile/test/pose_parity_test.dart 会跳过，
-#                               而那条测试是防止"Dart 和 Python 解出不同
-#                               骨架"的唯一保障。
-#
-#                               注意：导出的 ONNX 模型在 .cache/models/exported/
-#                               下，已被上面的 .cache/ 规则忽略 ——
-#                               模型文件不该入库（12 MB，且可重新导出）。
-#
-#   mobile/third_party/onnxruntime/   vendored 的 ONNX Runtime Flutter 包。
-#                               约 13.6 MB（只有一个 arm64 的 .so）。
-#                               **必须入库** —— 它是 pub 依赖（path 引用），
-#                               不在 pub 缓存里就构建不了。
-#
-#                               为什么要 vendor：pub 上的 1.4.1 是两年前发的，
-#                               以 android-33 编译，与当前 AndroidX 依赖链
-#                               （要求 34+）冲突，AGP 校验硬失败。
-#                               详见该目录下 android/build.gradle 的说明。
-#
-#                               ⚠️ 不要用 *.so 之类的通配规则忽略它 ——
-#                                  那样新克隆的仓库会构建失败，而且报错
-#                                  信息（AAR 元数据校验）看不出真正原因。
-#
-#   mobile/assets/fixtures/     从 samples/fixtures/ 同步来的测试数据。
-#                               由门禁自动同步，App 测试直接读它。
-#
-#   samples/fixtures/           三份通过契约校验的假数据。
-#                               它们是"契约的活例子"，不是生成物。
-#
-#   samples/videos/             开发用样例素材。体积大但需要保留 ——
-#                               没有它就无法验证分析链路。
+# ---- 必需源码与回归资产 ----
+# mobile/lib/models/          契约生成物，编译必需并受一致性检查
+# samples/pose_fixtures/      保留的跨语言解析回归样本
+# samples/fixtures/           三份契约展示样本
+# mobile/assets/fixtures/     同步到 App 的样本副本
+# 当前 App 已移除手机端 ONNX 推理，无 third_party ONNX path 依赖。
+# samples/videos/            私有开发原片，见下方忽略规则，独立备份
 
 # 编译好的安装包。放在根目录是为了方便找，但它是生成物 ——
 # 每次编译都变，提交进仓库只会让仓库迅速膨胀（53 MB）。
@@ -130,3 +96,6 @@ mobile/windows/flutter/ephemeral/
 /related paper/
 
 samples/videos/
+
+# Human reviewed athlete videos and labels are local datasets.
+/data/manual_timing/

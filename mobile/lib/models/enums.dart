@@ -503,7 +503,8 @@ enum MetricPhase {
   acceleration,
   transition,
   maxVelocity,
-  deceleration;
+  deceleration,
+  wholeRun;
 
   String toJson() => _values[this]!;
 
@@ -528,6 +529,7 @@ enum MetricPhase {
     MetricPhase.transition: 'transition',
     MetricPhase.maxVelocity: 'max_velocity',
     MetricPhase.deceleration: 'deceleration',
+    MetricPhase.wholeRun: 'whole_run',
   };
 }
 

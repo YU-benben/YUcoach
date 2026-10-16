@@ -39,6 +39,17 @@ from backend.analysis.reference_scale import ScaleEstimate  # noqa: E402
 from backend.analysis.rules import RULES, evaluate_rules  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def explicit_reference_conditions(monkeypatch):
+    """规则单测使用已声明测试条件的副本，不给生产文献补造元数据。"""
+    from dataclasses import replace
+    from backend.standards.loader import load_standards
+    lib = load_standards()
+    lib.entries = [replace(e, age_range=None, running_condition="unloaded")
+                   for e in lib.entries]
+    monkeypatch.setattr("backend.analysis.rules.load_or_empty", lambda: lib)
+
+
 # ---------------------------------------------------------------------------
 # 构造
 # ---------------------------------------------------------------------------
@@ -86,6 +97,8 @@ def _ctx(n: int = 60, view: str = "side", phase: str = "acceleration",
                             median_pixels_per_meter=0.3),
         events=GaitEvents(), phases=phases,
         athlete_height_cm=178.0,
+        athlete_gender="male", athlete_level="elite", athlete_event="100m",
+        running_condition="unloaded", complete_run=True,
     )
 
 
@@ -146,7 +159,7 @@ def test_finding_produced_when_standard_exists():
     构造一个明显低于下限的值，应当触发"步频偏低"。
     """
     metric = MetricResult(
-        metric_id="step_frequency",
+        metric_id="step_frequency", reference_phase="whole_run", reference_window="whole_run",
         value=180.0,          # 明显低于下限 259.4
         confidence=0.8,
         reliable=True,
@@ -160,10 +173,67 @@ def test_finding_produced_when_standard_exists():
     assert f["metric_ids"] == ["step_frequency"]
 
 
+def test_rule_does_not_invent_measurement_phase():
+    metric = MetricResult(metric_id="knee_angle_touchdown", value=179,
+                          reference_window="event_mean")
+    assert evaluate_rules(_ctx(phase="max_velocity"), [metric]) == []
+    assert "未确认" in metric.reliability_note
+
+
+def test_population_mismatch_prevents_rule():
+    metric = MetricResult(metric_id="step_frequency", value=180,
+                          reference_phase="whole_run", reference_window="whole_run")
+    ctx = _ctx()
+    ctx.athlete_level = "amateur"
+    assert evaluate_rules(ctx, [metric]) == []
+    assert "未匹配" in metric.reliability_note
+
+
+def test_rule_uses_only_matching_phase_statistics(monkeypatch):
+    from dataclasses import replace
+    from backend.standards.loader import load_standards
+    lib = load_standards()
+    knee = next(e for e in lib.entries if e.metric_id == "knee_angle_touchdown")
+    lib.entries = [replace(knee, age_range=None, running_condition="unloaded")]
+    monkeypatch.setattr("backend.analysis.rules.load_or_empty", lambda: lib)
+    metric = MetricResult(metric_id="knee_angle_touchdown", value=179,
+                          reference_window=knee.window,
+                          aggregate={"acceleration": {"mean": 179},
+                                     "max_velocity": {"mean": 150}})
+    # 起跑很高，途中跑在区间内：不可将起跑均值套到途中跑规则。
+    assert evaluate_rules(_ctx(), [metric]) == []
+    metric.aggregate["max_velocity"]["mean"] = 179
+    findings = evaluate_rules(_ctx(), [metric])
+    assert len(findings) == 1
+    assert findings[0]["evidence"][0]["value"] == 179
+
+
+def test_real_knee_metric_splits_events_by_phase():
+    from backend.analysis.metrics import metric_knee_angle_touchdown
+    from backend.analysis.phases import PhaseSegment
+    ctx = _ctx()
+    ctx.phases = [PhaseSegment("acceleration", 0, 29),
+                  PhaseSegment("max_velocity", 30, 59)]
+    ctx.events.touchdowns = [10, 20, 40]
+    metric = metric_knee_angle_touchdown(ctx)
+    assert metric.insufficient is None
+    assert metric.reference_window == "event_mean"
+    assert metric.aggregate["acceleration"]["n"] == 2
+    assert metric.aggregate["max_velocity"]["n"] == 1
+
+
+def test_no_findings_summary_does_not_claim_normality():
+    from backend.analysis.report import build_summary
+    metric = MetricResult(metric_id="step_frequency", value=180)
+    summary = build_summary([metric], [])
+    assert "均在合理范围" not in summary["headline"]
+    assert "不代表" in summary["headline"]
+
+
 def test_no_finding_when_value_within_range():
     """落在参考区间内时不产生结论 —— 这不算偏差。"""
     metric = MetricResult(
-        metric_id="step_frequency",
+        metric_id="step_frequency", reference_phase="whole_run", reference_window="whole_run",
         value=271.0,          # 落在 259.4–283.8 内
         confidence=0.8,
         reliable=True,
@@ -179,7 +249,7 @@ def test_no_finding_when_value_above_range_for_low_direction():
     方向搞反会让所有正常运动员被报出问题，而且数字看起来合理。
     """
     metric = MetricResult(
-        metric_id="step_frequency",
+        metric_id="step_frequency", reference_phase="whole_run", reference_window="whole_run",
         value=400.0,          # 远高于上限
         confidence=0.8,
         reliable=True,
@@ -210,7 +280,7 @@ def test_phase_mismatch_prevents_judgement():
 def test_finding_phase_is_contract_valid():
     """结论里的 phase 必须是契约枚举里的值，不能出现 whole_run。"""
     metric = MetricResult(
-        metric_id="step_frequency", value=180.0,
+        metric_id="step_frequency", reference_phase="whole_run", reference_window="whole_run", value=180.0,
         confidence=0.8, reliable=True,
     )
     findings = evaluate_rules(_ctx(), [metric])
@@ -236,7 +306,7 @@ def test_finding_satisfies_contract_structure():
     曾经往 evidence 里塞了 ref_source 字段，直接导致报告校验失败。
     """
     metric = MetricResult(
-        metric_id="step_frequency", value=180.0,
+        metric_id="step_frequency", reference_phase="whole_run", reference_window="whole_run", value=180.0,
         confidence=0.8, reliable=True,
     )
     findings = evaluate_rules(_ctx(), [metric])
@@ -271,7 +341,7 @@ def test_finding_has_mechanism_and_drill():
     和"具体练什么"。
     """
     metric = MetricResult(
-        metric_id="step_frequency", value=180.0,
+        metric_id="step_frequency", reference_phase="whole_run", reference_window="whole_run", value=180.0,
         confidence=0.8, reliable=True,
     )
     f = evaluate_rules(_ctx(), [metric])[0]
@@ -299,7 +369,7 @@ def test_finding_carries_source_citation():
     一次说不清来源的数字，会让教练不再相信所有数字。
     """
     metric = MetricResult(
-        metric_id="step_frequency", value=180.0,
+        metric_id="step_frequency", reference_phase="whole_run", reference_window="whole_run", value=180.0,
         confidence=0.8, reliable=True,
     )
     f = evaluate_rules(_ctx(), [metric])[0]
@@ -318,7 +388,7 @@ def test_finding_lists_standard_limitations():
     不告诉教练的话，他会把它当成权威结论。
     """
     metric = MetricResult(
-        metric_id="step_frequency", value=180.0,
+        metric_id="step_frequency", reference_phase="whole_run", reference_window="whole_run", value=180.0,
         confidence=0.8, reliable=True,
     )
     f = evaluate_rules(_ctx(), [metric])[0]
@@ -335,7 +405,7 @@ def test_low_reliability_metric_caps_confidence():
     这是契约的硬性要求：不可靠的数据不能得出高置信度的结论。
     """
     metric = MetricResult(
-        metric_id="step_frequency", value=180.0,
+        metric_id="step_frequency", reference_phase="whole_run", reference_window="whole_run", value=180.0,
         confidence=0.9,
         reliable=False,
         reliability_note="几何推导的足部点导致取值时刻不确定",

@@ -12,11 +12,10 @@
 
     标准库的 http.server 足够支撑这个场景，且零依赖。
 
-⚠️ 安全提示（必须知情）：
-    本服务**没有任何认证**，且默认监听 0.0.0.0（局域网可访问）。
-    设计前提是"训练场局域网内、短暂开启"。
-    绝不要把它暴露到公网 —— 那等于把整台机器上的文件读写
-    （通过视频路径参数）交给任何人。
+部署边界：
+    已有账号、额度与视频ID路径校验，但请求身份/授权仍是局域网原型。
+    默认监听0.0.0.0；目前仅用于可信局域网，不是公网生产服务。
+    API和人工计时/选人协议见docs/07-数据契约.md。
 
 接口：
     GET  /api/health
@@ -44,6 +43,7 @@ import argparse
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -93,9 +93,11 @@ from ..paths import (  # noqa: E402
     ACCOUNTS_FILE,
     CACHE_DIR,
     UPLOADS_DIR,
+    MANUAL_DATASET_DIR,
     apply_env_defaults,
     ensure_cache_dirs,
 )
+from ..analysis.pose_options import PoseOptionsError, pose_options_from_params
 from .accounts import (  # noqa: E402
     TIERS,
     Account,
@@ -142,6 +144,7 @@ STALE_UPLOAD_SECONDS = 24 * 3600
 #: 为什么按任务分目录：清理某次分析时直接删目录即可，
 #: 不会因为文件名规则复杂而误删别的任务的图。
 KEYFRAMES_ROOT = CACHE_DIR / "keyframes"
+DATASET_ROOT = MANUAL_DATASET_DIR
 
 SERVER_VERSION = "0.2.0"
 API_VERSION = "1"
@@ -304,6 +307,8 @@ def run_analysis(job: Job, params: dict) -> None:
         # 只在真的提交任务时才付出这个代价。
         from backend.analysis.analyze import run_pipeline
 
+        pose_options = pose_options_from_params(params)
+
         def on_progress(pct: float, stage: str) -> None:
             job.progress = pct
             job.stage = stage
@@ -316,15 +321,24 @@ def run_analysis(job: Job, params: dict) -> None:
             event=params.get("event", "100m"),
             level=params.get("level", "college"),
             height_cm=params.get("height_cm"),
+            athlete_age=params.get("athlete_age"),
+            running_condition=params.get("running_condition"),
+            load_protocol=params.get("load_protocol"),
+            complete_run=params.get("complete_run", False),
+            population_confirmed=(params.get("gender") in ("male", "female")
+                                  and params.get("level") in ("elite", "sub_elite", "college", "high_school", "amateur")
+                                  and params.get("event") in ("100m", "200m", "400m")),
             view=params.get("view", "side"),
             test_type=params.get("test_type", "acceleration"),
             camera_distance_m=params.get("camera_distance_m"),
             camera_height_m=params.get("camera_height_m"),
             has_lane_line=params.get("has_lane_line"),
             camera_followed=params.get("camera_followed"),
+            manual_review=params.get("manual_review"),
+            target_selection=params.get("target_selection"),
             session_id=params.get("session_id"),
             team_id=params.get("team_id", "t_local"),
-            model_name=params.get("model", "yolov8n-pose.pt"),
+            **pose_options,
             # 关键帧图片按任务分开存 —— 一个任务一个目录，
             # 这样清理某次分析时直接删目录，不会误删别的任务。
             keyframe_dir=KEYFRAMES_ROOT / job.job_id,
@@ -333,6 +347,26 @@ def run_analysis(job: Job, params: dict) -> None:
             log=job.log.append,
         )
 
+        if params.get("manual_review") is not None or params.get("target_selection") is not None:
+            # Reviewed clips are retained independently of expiring uploads.
+            import shutil
+            archive = DATASET_ROOT / job.job_id
+            archive.mkdir(parents=True, exist_ok=True)
+            source = Path(job.video_path)
+            shutil.copy2(source, archive / ("video" + source.suffix))
+            (archive / "review.json").write_text(json.dumps({
+                "video_id": job.video_id, "job_id": job.job_id,
+                "athlete_id": params.get("athlete_id"),
+                "athlete_name": params.get("athlete_name"),
+                "review": params.get("manual_review"),
+                "target_selection": params.get("target_selection"),
+                "provenance": "human_annotations_not_validated_ground_truth",
+                "created_at": time.time(),
+            }, ensure_ascii=False, indent=2), encoding="utf-8")
+            (archive / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+            tracking = KEYFRAMES_ROOT / job.job_id / "target_tracking.json"
+            if tracking.is_file():
+                shutil.copy2(tracking, archive / "target_tracking.json")
         job.report = report
         job.progress = 1.0
         job.stage = "完成"
@@ -429,6 +463,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         path = self.path.split("?")[0].rstrip("/")
+
+        if path.startswith("/api/videos/"):
+            self._serve_video_review(path)
+            return
 
         if path in ("/api/health", "/api"):
             self._send_health()
@@ -723,6 +761,18 @@ class Handler(BaseHTTPRequestHandler):
         if params is None:
             return
 
+        condition = params.get("running_condition")
+        load_protocol = params.get("load_protocol")
+        age = params.get("athlete_age")
+        if (condition is not None and condition not in ("unloaded", "resisted", "assisted")
+                or type(params.get("complete_run", False)) is not bool
+                or age is not None and (type(age) not in (int, float) or not 0 < age < 120)
+                or load_protocol is not None and (not isinstance(load_protocol, str) or not load_protocol.strip())
+                or condition in ("resisted", "assisted") and not load_protocol
+                or condition == "unloaded" and load_protocol is not None):
+            self._send_json({"error": "参考匹配参数无效：请检查年龄、完整全程确认和负荷方案"}, 400)
+            return
+
         # ---- 额度检查 ----
         #
         # ⚠️ 必须在**扣额度之前**把所有会失败的检查做完，
@@ -825,9 +875,47 @@ class Handler(BaseHTTPRequestHandler):
             }, 404)
             return
 
+        mode = params.get("analysis_mode", "automatic")
+        if mode not in ("automatic", "manual_side_v1"):
+            self._send_json({"error": "未知分析模式"}, 400)
+            return
+        if "target_selection" in params:
+            try:
+                from backend.analysis.target_lock import validate_target
+                from backend.analysis.manual_timing import inspect_video
+                metadata = inspect_video(video_path)
+                target = validate_target(params["target_selection"], metadata["frame_count"])
+                if params.get("view") != "side" or params.get("camera_followed") is not False:
+                    raise ValueError("人物锁定首版仅支持固定侧面高帧率原片")
+                review = params.get("manual_review")
+                if isinstance(review, dict) and isinstance(review.get("events"), list):
+                    for e in review["events"]:
+                        if not isinstance(e, dict) or type(e.get("frame")) is not int or not target["frame"] <= e["frame"] <= target["end_frame"]:
+                            raise ValueError("人工事件超出选人区间")
+            except (ValueError, RuntimeError) as exc:
+                self._send_json({"error": str(exc)}, 400)
+                return
+        if mode == "manual_side_v1" or "manual_review" in params:
+            try:
+                from backend.analysis.manual_timing import inspect_video, validate_review
+                if mode != "manual_side_v1":
+                    raise ValueError("人工标注必须使用 manual_side_v1 模式")
+                metadata = inspect_video(video_path)
+                validate_review(params.get("manual_review"), metadata,
+                                view=params.get("view"), camera_followed=params.get("camera_followed"))
+            except (ValueError, RuntimeError) as exc:
+                self._send_json({"error": str(exc)}, 400)
+                return
+
         view = params.get("view", "side")
         if view not in ("side", "front", "back"):
             self._send_json({"error": f"view 取值非法：{view}"}, 400)
+            return
+
+        try:
+            pose_options_from_params(params)
+        except PoseOptionsError as exc:
+            self._send_json({"error": str(exc)}, 400)
             return
 
         # ---- 扣额度 ----
@@ -850,6 +938,42 @@ class Handler(BaseHTTPRequestHandler):
         ).start()
 
         self._send_json({"job_id": job.job_id, "status": job.status}, 202)
+
+    def _serve_video_review(self, path: str) -> None:
+        match = re.fullmatch(r"/api/videos/([0-9a-f]{16})/(metadata|frames/([0-9]{1,7}))", path)
+        if match is None:
+            self._send_json({"error": "视频预览路径无效"}, 400)
+            return
+        with _UPLOAD_LOCK:
+            name = UPLOADED.get(match[1])
+        video = UPLOAD_DIR / name if name else None
+        if video is None or not video.is_file() or video.resolve().parent != UPLOAD_DIR.resolve():
+            self._send_json({"error": "视频已不存在，请重新上传"}, 404)
+            return
+        try:
+            from backend.analysis.manual_timing import inspect_video, read_frame
+            if match[2] == "metadata":
+                self._send_json(inspect_video(video))
+                return
+            index = int(match[3])
+            # Fast upper bound before sequential decoding.
+            import cv2
+            cap = cv2.VideoCapture(str(video))
+            try:
+                count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            finally:
+                cap.release()
+            if not 0 <= index < count:
+                raise ValueError("帧号越界")
+            data = read_frame(video, index)
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(data)
+        except (ValueError, RuntimeError) as exc:
+            self._send_json({"error": str(exc)}, 400)
 
     def _send_job(self, job_id: str, include_report: bool) -> None:
         job = JOBS.get(job_id)

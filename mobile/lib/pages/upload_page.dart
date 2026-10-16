@@ -16,6 +16,8 @@ import '../widgets/capture_info_form.dart';
 import 'athlete_list_page.dart' show eventLabelOf;
 import 'refreshable.dart';
 import 'report_page.dart';
+import 'manual_contact_review_page.dart';
+import 'target_selection_page.dart';
 import 'server_settings_page.dart';
 import '../widgets/app_colors.dart';
 
@@ -54,6 +56,7 @@ class UploadPage extends StatefulWidget {
 /// 公开（非 `_` 前缀）是为了让主界面能通过 `GlobalKey<UploadPageState>`
 /// 在切 Tab 时调用 reload()。见 refreshable.dart 的说明。
 class UploadPageState extends State<UploadPage> implements Refreshable {
+  bool _manualTiming = true;
   final _probe = const VideoProbe();
   final _client = AnalysisServerClient();
   final _settings = ServerSettings();
@@ -69,6 +72,8 @@ class UploadPageState extends State<UploadPage> implements Refreshable {
   VideoValidation? _validation;
 
   CaptureInfo? _captureInfo;
+  String _poseModel = 'yolov8n-pose.pt';
+  int _poseImageSize = 960;
 
   bool _picking = false;
   bool _saving = false;
@@ -206,7 +211,8 @@ class UploadPageState extends State<UploadPage> implements Refreshable {
       if (!mounted) return;
       setState(() {
         _picking = false;
-        _pickError = '${e.message}\n\n'
+        _pickError =
+            '${e.message}\n\n'
             '开发提示：读取视频元数据依赖 Android 原生接口，'
             '在 Windows 上跑只能测界面，测不了这一步。';
       });
@@ -214,7 +220,8 @@ class UploadPageState extends State<UploadPage> implements Refreshable {
       if (!mounted) return;
       setState(() {
         _picking = false;
-        _pickError = '读取视频失败：$e\n\n'
+        _pickError =
+            '读取视频失败：$e\n\n'
             '可能原因：文件损坏、编码不支持，或文件权限已失效。';
       });
     }
@@ -244,11 +251,7 @@ class UploadPageState extends State<UploadPage> implements Refreshable {
                 if (_athletes.isEmpty)
                   const _NeedAthleteFirst()
                 else ...[
-                  _StepHeader(
-                    index: 1,
-                    title: '选择运动员',
-                    done: _athlete != null,
-                  ),
+                  _StepHeader(index: 1, title: '选择运动员', done: _athlete != null),
                   const SizedBox(height: 8),
                   DropdownButtonFormField<String>(
                     // 用 id 而不是 AthleteRecord 对象作为下拉值。
@@ -353,6 +356,82 @@ class UploadPageState extends State<UploadPage> implements Refreshable {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('固定侧面 · 人工确认计时（推荐）'),
+          subtitle: const Text('至少 120 fps 原片。上传后逐帧确认接触；只计算时间指标。关闭后为实验性自动分析。'),
+          value: _manualTiming,
+          onChanged: busy ? null : (v) => setState(() => _manualTiming = v),
+        ),
+        if (!_manualTiming) ...[
+          DropdownButtonFormField<String>(
+            key: const Key('analysis-model'),
+            initialValue: _poseModel,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: '分析模型'),
+            items: const [
+              DropdownMenuItem(
+                value: 'yolov8n-pose.pt',
+                child: Text('YOLOv8n · 快速（默认）'),
+              ),
+              DropdownMenuItem(
+                value: 'yolov8s-pose.pt',
+                child: Text('YOLOv8s · 小型'),
+              ),
+              DropdownMenuItem(
+                value: 'yolov8m-pose.pt',
+                child: Text('YOLOv8m · 中型'),
+              ),
+              DropdownMenuItem(
+                value: 'yolov8l-pose.pt',
+                child: Text('YOLOv8l · 大型'),
+              ),
+              DropdownMenuItem(
+                value: 'lightweight',
+                child: Text('RTMPose · 轻量（含足部点）'),
+              ),
+              DropdownMenuItem(
+                value: 'balanced',
+                child: Text('RTMPose · 均衡（含足部点）'),
+              ),
+              DropdownMenuItem(
+                value: 'performance',
+                child: Text('RTMPose · 高性能（含足部点）'),
+              ),
+            ],
+            onChanged: busy
+                ? null
+                : (value) => setState(() => _poseModel = value!),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _poseModel.endsWith('.pt')
+                ? 'YOLO 的脚尖、脚跟由几何推导。更大的模型通常耗时更长，效果需用实际视频比较。'
+                : 'RTMPose 直接预测脚尖、脚跟。首次使用需由电脑下载模型，请保持联网；切换模型可能改变指标结果。',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          if (_poseModel.endsWith('.pt')) ...[
+            const SizedBox(height: 12),
+            DropdownButtonFormField<int>(
+              key: const Key('analysis-image-size'),
+              initialValue: _poseImageSize,
+              decoration: const InputDecoration(labelText: '识别分辨率'),
+              items: const [
+                DropdownMenuItem(value: 640, child: Text('640 · 较快')),
+                DropdownMenuItem(value: 960, child: Text('960 · 默认')),
+                DropdownMenuItem(value: 1280, child: Text('1280 · 较高分辨率')),
+              ],
+              onChanged: busy
+                  ? null
+                  : (value) => setState(() => _poseImageSize = value!),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '首次使用新模型需由电脑下载权重，请保持联网。',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ],
         if (_saveMessage != null) ...[
           const SizedBox(height: 12),
           _SuccessBox(text: _saveMessage!),
@@ -395,8 +474,7 @@ class UploadPageState extends State<UploadPage> implements Refreshable {
                 Expanded(
                   child: Text(
                     '还需要：${missing.join('、')}',
-                    style: TextStyle(
-                        fontSize: 12, color: context.mutedText),
+                    style: TextStyle(fontSize: 12, color: context.mutedText),
                   ),
                 ),
               ],
@@ -442,6 +520,12 @@ class UploadPageState extends State<UploadPage> implements Refreshable {
     final athlete = _athlete;
     final meta = _metadata;
     if (athlete == null || meta == null) return;
+    if (info.view != SessionView.side || info.cameraFollowed != false) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('人物锁定首版请填写侧面视角，并确认没有镜头跟随。')));
+      return;
+    }
 
     setState(() {
       _saving = true;
@@ -527,8 +611,7 @@ class UploadPageState extends State<UploadPage> implements Refreshable {
             '请到「我的 → 编辑资料」补一个用户名，回来后即可提交。'
             '这次的记录已存在本机，补完用户名后仍能在「数据」里看到。';
       });
-      await widget.sessions.markFailed(
-          record.sessionId, '账号没有用户名，未提交分析');
+      await widget.sessions.markFailed(record.sessionId, '账号没有用户名，未提交分析');
       return;
     }
 
@@ -557,8 +640,7 @@ class UploadPageState extends State<UploadPage> implements Refreshable {
         _analysisError = e.message;
         _analysisHint = e.hint;
       });
-      await widget.sessions.markFailed(
-          record.sessionId, '上传失败：${e.message}');
+      await widget.sessions.markFailed(record.sessionId, '上传失败：${e.message}');
       return;
     } catch (e) {
       if (!mounted) return;
@@ -580,7 +662,55 @@ class UploadPageState extends State<UploadPage> implements Refreshable {
 
     String jobId;
     try {
+      final target = await Navigator.of(context).push<Map<String, dynamic>>(
+        MaterialPageRoute(
+          builder: (_) => TargetSelectionPage(
+            client: _client,
+            baseUrl: baseUrl,
+            videoId: videoId,
+          ),
+        ),
+      );
+      if (!mounted) return;
+      if (target == null) {
+        await widget.sessions.markFailed(record.sessionId, '选人已取消，未提交分析');
+        if (mounted) {
+          setState(() {
+            _saving = false;
+            _phase = _Phase.failed;
+            _analysisError = '选人已取消，未扣分析额度';
+          });
+        }
+        return;
+      }
+      Map<String, dynamic>? review;
+      if (_manualTiming) {
+        review = await Navigator.of(context).push<Map<String, dynamic>>(
+          MaterialPageRoute(
+            builder: (_) => ManualContactReviewPage(
+              client: _client,
+              baseUrl: baseUrl,
+              videoId: videoId,
+              targetSelection: target,
+            ),
+          ),
+        );
+        if (!mounted) return;
+        if (review == null) {
+          await widget.sessions.markFailed(record.sessionId, '人工确认已取消，未提交分析');
+          if (mounted) {
+            setState(() {
+              _saving = false;
+              _phase = _Phase.failed;
+              _analysisError = '人工确认已取消，未扣分析额度';
+            });
+          }
+          return;
+        }
+      }
       jobId = await _client.submitAnalysis(
+        manualReview: review,
+        targetSelection: target,
         baseUrl: baseUrl,
         videoId: videoId,
         athleteId: athlete.athleteId,
@@ -601,6 +731,10 @@ class UploadPageState extends State<UploadPage> implements Refreshable {
         // 服务端靠它认账号、扣额度。为空时服务端会回「请先登录」——
         // 所以下面提交前会先拦一道，把话说明白。
         username: widget.user?.username,
+        estimator: _poseModel.endsWith('.pt') ? 'yolo' : 'rtm',
+        model: _poseModel,
+        imgsz: _poseImageSize,
+        rtmMode: _poseModel,
       );
       await widget.sessions.markQueued(record.sessionId, jobId);
     } on ServerException catch (e) {
@@ -611,15 +745,13 @@ class UploadPageState extends State<UploadPage> implements Refreshable {
         _analysisError = e.message;
         _analysisHint = e.hint;
       });
-      await widget.sessions.markFailed(
-          record.sessionId, '提交分析失败：${e.message}');
+      await widget.sessions.markFailed(record.sessionId, '提交分析失败：${e.message}');
       return;
     }
 
     // ---- 轮询进度 ----
     try {
-      await for (final p in _client.watchJob(
-          baseUrl: baseUrl, jobId: jobId)) {
+      await for (final p in _client.watchJob(baseUrl: baseUrl, jobId: jobId)) {
         if (!mounted) return;
         setState(() {
           _analysisProgress = p.progress;
@@ -639,10 +771,14 @@ class UploadPageState extends State<UploadPage> implements Refreshable {
         if (p.isDone && p.report != null) {
           // ---- 落库并打开报告 ----
           final result = AnalysisResult.fromJson(p.report!);
-          final analysisId =
-              result.analysisId.isNotEmpty ? result.analysisId : jobId;
+          final analysisId = result.analysisId.isNotEmpty
+              ? result.analysisId
+              : jobId;
           await widget.sessions.markAnalyzed(
-              record.sessionId, analysisId, result);
+            record.sessionId,
+            analysisId,
+            result,
+          );
 
           if (!mounted) return;
           await Navigator.of(context).push(
@@ -654,8 +790,7 @@ class UploadPageState extends State<UploadPage> implements Refreshable {
         }
 
         if (p.isFailed) {
-          await widget.sessions
-              .markFailed(record.sessionId, p.error ?? '分析失败');
+          await widget.sessions.markFailed(record.sessionId, p.error ?? '分析失败');
           return;
         }
       }
@@ -667,8 +802,7 @@ class UploadPageState extends State<UploadPage> implements Refreshable {
         _analysisError = e.message;
         _analysisHint = e.hint;
       });
-      await widget.sessions.markFailed(
-          record.sessionId, '分析中断：${e.message}');
+      await widget.sessions.markFailed(record.sessionId, '分析中断：${e.message}');
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -711,19 +845,19 @@ class UploadPageState extends State<UploadPage> implements Refreshable {
   }
 
   static String _levelToContract(AthleteLevel l) => switch (l) {
-        AthleteLevel.elite => 'elite',
-        AthleteLevel.subElite => 'sub_elite',
-        AthleteLevel.college => 'college',
-        AthleteLevel.highSchool => 'high_school',
-        AthleteLevel.amateur => 'amateur',
-      };
+    AthleteLevel.elite => 'elite',
+    AthleteLevel.subElite => 'sub_elite',
+    AthleteLevel.college => 'college',
+    AthleteLevel.highSchool => 'high_school',
+    AthleteLevel.amateur => 'amateur',
+  };
 
   static String _testTypeToContract(SessionTestType t) => switch (t) {
-        SessionTestType.blockStart => 'block_start',
-        SessionTestType.acceleration => 'acceleration',
-        SessionTestType.maxVelocity => 'max_velocity',
-        SessionTestType.speedEndurance => 'speed_endurance',
-      };
+    SessionTestType.blockStart => 'block_start',
+    SessionTestType.acceleration => 'acceleration',
+    SessionTestType.maxVelocity => 'max_velocity',
+    SessionTestType.speedEndurance => 'speed_endurance',
+  };
 
   Widget _pickCard() {
     final picked = _metadata != null;
@@ -786,7 +920,11 @@ class UploadPageState extends State<UploadPage> implements Refreshable {
               '选完会先做一次校验：帧率、分辨率、时长是否达标。\n'
               '不合格会立刻告诉你，不用白等上传。',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11, color: context.faintText, height: 1.5),
+              style: TextStyle(
+                fontSize: 11,
+                color: context.faintText,
+                height: 1.5,
+              ),
             ),
           ],
         ],
@@ -857,37 +995,43 @@ class _MetadataTable extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('文件信息',
-              style: TextStyle(fontSize: 13, color: context.faintText)),
+          Text(
+            '文件信息',
+            style: TextStyle(fontSize: 13, color: context.faintText),
+          ),
           const SizedBox(height: 8),
           _row(context, '时长', metadata.durationLabel),
           _row(context, '分辨率', metadata.resolutionLabel),
           _row(context, '声明帧率', metadata.frameRateLabel),
           _row(context, '总帧数', metadata.frameCountLabel),
           if (fileSize != null)
-            _row(context, '文件大小',
-                '${(fileSize! / (1024 * 1024)).toStringAsFixed(1)} MB'),
-          if (metadata.mimeType != null) _row(context, '编码', metadata.mimeType!),
+            _row(
+              context,
+              '文件大小',
+              '${(fileSize! / (1024 * 1024)).toStringAsFixed(1)} MB',
+            ),
+          if (metadata.mimeType != null)
+            _row(context, '编码', metadata.mimeType!),
         ],
       ),
     );
   }
 
   Widget _row(BuildContext context, String k, String v) => Padding(
-        padding: const EdgeInsets.only(bottom: 3),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 72,
-              child: Text(k,
-                  style: TextStyle(fontSize: 12, color: context.faintText)),
-            ),
-            Expanded(
-              child: Text(v, style: const TextStyle(fontSize: 13)),
-            ),
-          ],
+    padding: const EdgeInsets.only(bottom: 3),
+    child: Row(
+      children: [
+        SizedBox(
+          width: 72,
+          child: Text(
+            k,
+            style: TextStyle(fontSize: 12, color: context.faintText),
+          ),
         ),
-      );
+        Expanded(child: Text(v, style: const TextStyle(fontSize: 13))),
+      ],
+    ),
+  );
 }
 
 class _IssueBox extends StatelessWidget {
@@ -907,20 +1051,20 @@ class _IssueBox extends StatelessWidget {
   Widget build(BuildContext context) {
     final (bg, fg, icon) = switch (level) {
       CheckLevel.ok => (
-          context.okSurface,
-          context.okText,
-          Icons.check_circle_outline,
-        ),
+        context.okSurface,
+        context.okText,
+        Icons.check_circle_outline,
+      ),
       CheckLevel.warning => (
-          context.warnSurface,
-          context.warnText,
-          Icons.warning_amber_outlined,
-        ),
+        context.warnSurface,
+        context.warnText,
+        Icons.warning_amber_outlined,
+      ),
       CheckLevel.blocking => (
-          context.errorSurface,
-          context.errorText,
-          Icons.error_outline,
-        ),
+        context.errorSurface,
+        context.errorText,
+        Icons.error_outline,
+      ),
     };
 
     return Container(
@@ -950,14 +1094,24 @@ class _IssueBox extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 6),
-          Text(detail,
-              style: const TextStyle(
-                  fontSize: 13, color: Colors.black87, height: 1.5)),
+          Text(
+            detail,
+            style: const TextStyle(
+              fontSize: 13,
+              color: Colors.black87,
+              height: 1.5,
+            ),
+          ),
           if (suggestion != null) ...[
             const SizedBox(height: 6),
-            Text('建议：$suggestion',
-                style: TextStyle(
-                    fontSize: 13, color: context.mutedText, height: 1.5)),
+            Text(
+              '建议：$suggestion',
+              style: TextStyle(
+                fontSize: 13,
+                color: context.mutedText,
+                height: 1.5,
+              ),
+            ),
           ],
         ],
       ),
@@ -987,8 +1141,10 @@ class _CapabilitySummary extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('本次素材可分析的指标',
-              style: TextStyle(fontSize: 13, color: context.faintText)),
+          Text(
+            '本次素材可分析的指标',
+            style: TextStyle(fontSize: 13, color: context.faintText),
+          ),
           const SizedBox(height: 8),
           _line(context, '关节角度（膝角、胫骨角、躯干前倾）', true),
           _line(context, '步频、步幅', true),
@@ -998,10 +1154,13 @@ class _CapabilitySummary extends StatelessWidget {
             temporal
                 ? '帧率充足，时间类指标可用。'
                 : '帧率不足，时间类指标无法计算。'
-                    '这不是系统缺陷 —— 触地仅 80–120 毫秒，'
-                    '帧率不够就数不出足够多的帧。',
+                      '这不是系统缺陷 —— 触地仅 80–120 毫秒，'
+                      '帧率不够就数不出足够多的帧。',
             style: TextStyle(
-                fontSize: 11, color: context.faintText, height: 1.5),
+              fontSize: 11,
+              color: context.faintText,
+              height: 1.5,
+            ),
           ),
         ],
       ),
@@ -1009,27 +1168,27 @@ class _CapabilitySummary extends StatelessWidget {
   }
 
   Widget _line(BuildContext context, String label, bool ok) => Padding(
-        padding: const EdgeInsets.only(bottom: 4),
-        child: Row(
-          children: [
-            Icon(
-              ok ? Icons.check : Icons.remove,
-              size: 15,
-              color: ok ? context.okText : Color(0xFF9E9E9E),
-            ),
-            SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: ok ? Colors.black87 : context.faintText,
-                ),
-              ),
-            ),
-          ],
+    padding: const EdgeInsets.only(bottom: 4),
+    child: Row(
+      children: [
+        Icon(
+          ok ? Icons.check : Icons.remove,
+          size: 15,
+          color: ok ? context.okText : Color(0xFF9E9E9E),
         ),
-      );
+        SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: ok ? Colors.black87 : context.faintText,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1041,9 +1200,9 @@ class _CapabilitySummary extends StatelessWidget {
 /// 用枚举而不是若干个 bool 组合：多个 bool 会出现
 /// 「既在上传又在分析」这类不可能的状态，而枚举天然互斥。
 enum _Phase {
-  idle,        // 还没提交
-  uploading,   // 正在把视频传到分析服务
-  analyzing,   // 服务端正在算
+  idle, // 还没提交
+  uploading, // 正在把视频传到分析服务
+  analyzing, // 服务端正在算
   done,
   failed,
 }
@@ -1093,13 +1252,14 @@ class _ProgressBox extends StatelessWidget {
                 child: Text(
                   uploading ? '正在上传视频' : '正在分析（在电脑上运行）',
                   style: const TextStyle(
-                      fontWeight: FontWeight.w600, fontSize: 14),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
                 ),
               ),
               Text(
                 '${(value * 100).round()}%',
-                style: TextStyle(
-                    fontSize: 13, color: context.mutedText),
+                style: TextStyle(fontSize: 13, color: context.mutedText),
               ),
             ],
           ),
@@ -1180,21 +1340,15 @@ class _ServerHintState extends State<_ServerHint> {
             Icon(
               configured ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
               size: 15,
-              color: configured
-                  ? context.okText
-                  : context.warnText,
+              color: configured ? context.okText : context.warnText,
             ),
             SizedBox(width: 6),
             Flexible(
               child: Text(
-                configured
-                    ? '分析服务：$_url'
-                    : '还没设置分析服务 — 点击设置',
+                configured ? '分析服务：$_url' : '还没设置分析服务 — 点击设置',
                 style: TextStyle(
                   fontSize: 11,
-                  color: configured
-                      ? context.faintText
-                      : context.warnText,
+                  color: configured ? context.faintText : context.warnText,
                 ),
               ),
             ),
@@ -1212,28 +1366,30 @@ class _ErrorBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        width: double.infinity,
-        padding: EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: context.errorSurface,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Icon(Icons.error_outline,
-                size: 18, color: Color(0xFFC62828)),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                text,
-                style: const TextStyle(
-                    color: Color(0xFFC62828), fontSize: 13, height: 1.5),
-              ),
+    width: double.infinity,
+    padding: EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: context.errorSurface,
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.error_outline, size: 18, color: Color(0xFFC62828)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: Color(0xFFC62828),
+              fontSize: 13,
+              height: 1.5,
             ),
-          ],
+          ),
         ),
-      );
+      ],
+    ),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1245,27 +1401,29 @@ class _NeedAthleteFirst extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: context.warnSurface,
-          borderRadius: BorderRadius.circular(8),
+    padding: EdgeInsets.all(20),
+    decoration: BoxDecoration(
+      color: context.warnSurface,
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Column(
+      children: [
+        Icon(Icons.info_outline, color: Color(0xFFE65100), size: 32),
+        SizedBox(height: 12),
+        Text(
+          '请先添加运动员',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
-        child: Column(
-          children: [
-            Icon(Icons.info_outline, color: Color(0xFFE65100), size: 32),
-            SizedBox(height: 12),
-            Text('请先添加运动员',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-            SizedBox(height: 6),
-            Text(
-              '分析结果需要归到具体运动员名下。\n'
-              '请先到「运动员」页添加，再回来上传。',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: context.mutedText, height: 1.6),
-            ),
-          ],
+        SizedBox(height: 6),
+        Text(
+          '分析结果需要归到具体运动员名下。\n'
+          '请先到「运动员」页添加，再回来上传。',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: context.mutedText, height: 1.6),
         ),
-      );
+      ],
+    ),
+  );
 }
 
 class _StepHeader extends StatelessWidget {
@@ -1281,23 +1439,24 @@ class _StepHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(
-        children: [
-          CircleAvatar(
-            radius: 12,
-            backgroundColor:
-                done ? context.okText : context.hairline,
-            child: done
-                ? const Icon(Icons.check, size: 14, color: Colors.white)
-                : Text('$index',
-                    style: TextStyle(
-                        fontSize: 12, color: context.mutedText)),
-          ),
-          const SizedBox(width: 8),
-          Text(title,
-              style: const TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.w600)),
-        ],
-      );
+    children: [
+      CircleAvatar(
+        radius: 12,
+        backgroundColor: done ? context.okText : context.hairline,
+        child: done
+            ? const Icon(Icons.check, size: 14, color: Colors.white)
+            : Text(
+                '$index',
+                style: TextStyle(fontSize: 12, color: context.mutedText),
+              ),
+      ),
+      const SizedBox(width: 8),
+      Text(
+        title,
+        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+      ),
+    ],
+  );
 }
 
 /// 保存成功提示。
@@ -1308,27 +1467,33 @@ class _SuccessBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        width: double.infinity,
-        padding: EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: context.okSurface,
-          borderRadius: BorderRadius.circular(8),
+    width: double.infinity,
+    padding: EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: context.okSurface,
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Row(
+      children: [
+        const Icon(
+          Icons.check_circle_outline,
+          size: 18,
+          color: Color(0xFF2E7D32),
         ),
-        child: Row(
-          children: [
-            const Icon(Icons.check_circle_outline,
-                size: 18, color: Color(0xFF2E7D32)),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                text,
-                style: const TextStyle(
-                    color: Color(0xFF2E7D32), fontSize: 13, height: 1.5),
-              ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: Color(0xFF2E7D32),
+              fontSize: 13,
+              height: 1.5,
             ),
-          ],
+          ),
         ),
-      );
+      ],
+    ),
+  );
 }
 
 /// 拍摄要点。
@@ -1356,19 +1521,23 @@ class _ShootingGuide extends StatelessWidget {
 
   /// 三个视角通用的要求。
   static const _commonItems = <(String, String)>[
-    ('帧率 ≥120 fps',
-        '用手机「慢动作」模式。低于这个值，触地时间、腾空时间都测不准 —— '
-            '30 fps 每帧间隔 33 毫秒，而触地本身只有 80–120 毫秒。'),
-    ('曝光与对焦锁定',
-        '自动曝光会让关键点位置随亮度漂移。拍摄前长按屏幕锁定，或用专业模式。'),
-    ('关闭电子防抖',
-        '防抖会引入帧间几何变形（画面被拉伸或旋转），反而让测量不准。'
-            '光学防抖可以保留。'),
-    ('运动员占画面高度 1/3 以上',
-        '太小人就糊，关键点会飘。宁可只拍有效的一段，也不要拍成一个人影。'),
-    ('背景尽量干净',
-        '画面里出现路人时，姿态识别可能落到别人身上。'
-            '训练场边上有人走动时尤其要注意。'),
+    (
+      '帧率 ≥120 fps',
+      '用手机「慢动作」模式。低于这个值，触地时间、腾空时间都测不准 —— '
+          '30 fps 每帧间隔 33 毫秒，而触地本身只有 80–120 毫秒。',
+    ),
+    ('曝光与对焦锁定', '自动曝光会让关键点位置随亮度漂移。拍摄前长按屏幕锁定，或用专业模式。'),
+    (
+      '关闭电子防抖',
+      '防抖会引入帧间几何变形（画面被拉伸或旋转），反而让测量不准。'
+          '光学防抖可以保留。',
+    ),
+    ('运动员占画面高度 1/3 以上', '太小人就糊，关键点会飘。宁可只拍有效的一段，也不要拍成一个人影。'),
+    (
+      '背景尽量干净',
+      '画面里出现路人时，姿态识别可能落到别人身上。'
+          '训练场边上有人走动时尤其要注意。',
+    ),
   ];
 
   /// 按视角的具体要求。
@@ -1378,14 +1547,14 @@ class _ShootingGuide extends StatelessWidget {
       icon: Icons.compare_arrows,
       measures: '测得出：躯干前倾、膝角、胫骨角、踝角、步频、触地与腾空时间',
       items: [
-        ('机位距离 8–15 米，高度约等于髋高',
-            '镜头光轴尽量垂直于跑动方向。太高或太低都会让角度看起来偏大或偏小。'),
-        ('让分道线入画',
-            '有分道线才能把画面尺寸换算成实际距离，步幅这类指标才算得出来。'),
-        ('镜头跟随要平滑',
-            '运动员尽量保持在画面中央 —— 越靠边透视误差越大。'
-                '这也是本 App 在跟拍素材上不算绝对速度的原因：'
-                '画面里的位移 = 运动员位移 + 镜头位移，单目分不开。'),
+        ('机位距离 8–15 米，高度约等于髋高', '镜头光轴尽量垂直于跑动方向。太高或太低都会让角度看起来偏大或偏小。'),
+        ('让分道线入画', '有分道线才能把画面尺寸换算成实际距离，步幅这类指标才算得出来。'),
+        (
+          '镜头跟随要平滑',
+          '运动员尽量保持在画面中央 —— 越靠边透视误差越大。'
+              '这也是本 App 在跟拍素材上不算绝对速度的原因：'
+              '画面里的位移 = 运动员位移 + 镜头位移，单目分不开。',
+        ),
       ],
     ),
     'front': _ViewGuide(
@@ -1393,16 +1562,18 @@ class _ShootingGuide extends StatelessWidget {
       icon: Icons.arrow_downward,
       measures: '测得出：骨盆下沉、膝内扣、着地是否过中线、躯干左右晃动',
       items: [
-        ('机位在跑道正前方，运动员朝镜头跑来',
-            '必须正对。偏一点就会有左右透视差，额状面角度全错，'
-                '而且错得看不出来 —— 数值看起来完全正常。'),
-        ('镜头高度齐胸或齐腰',
-            '太高会俯视，把左右差异压扁；太低会仰视，夸大差异。'),
-        ('不要跟随平移',
-            '正面拍摄时镜头固定即可，让运动员从远到近。'
-                '跟随会改变透视，破坏左右对称性 —— 而对称性正是额状面指标的基础。'),
-        ('尽量在直道上拍',
-            '弯道上运动员身体本来就向内倾，会被误读成姿势问题。'),
+        (
+          '机位在跑道正前方，运动员朝镜头跑来',
+          '必须正对。偏一点就会有左右透视差，额状面角度全错，'
+              '而且错得看不出来 —— 数值看起来完全正常。',
+        ),
+        ('镜头高度齐胸或齐腰', '太高会俯视，把左右差异压扁；太低会仰视，夸大差异。'),
+        (
+          '不要跟随平移',
+          '正面拍摄时镜头固定即可，让运动员从远到近。'
+              '跟随会改变透视，破坏左右对称性 —— 而对称性正是额状面指标的基础。',
+        ),
+        ('尽量在直道上拍', '弯道上运动员身体本来就向内倾，会被误读成姿势问题。'),
       ],
     ),
     'back': _ViewGuide(
@@ -1410,15 +1581,18 @@ class _ShootingGuide extends StatelessWidget {
       icon: Icons.arrow_upward,
       measures: '测得出：与正面相同的额状面指标',
       items: [
-        ('机位在运动员身后，拍他跑远',
-            '与正面一样必须正对跑道。'),
-        ('⚠️ 左右判读与正面相反',
-            '背面拍摄时画面左边的腿是运动员的**左腿**。'
-                'App 已按拍摄视角做了转换，但你看图时仍要留意，'
-                '别和正面素材混着比较。'),
-        ('不要把正面和背面的素材当成同一组数据',
-            '两者测的是同一类指标，但左右基准不同，'
-                '混在一起看会得出矛盾的结论。'),
+        ('机位在运动员身后，拍他跑远', '与正面一样必须正对跑道。'),
+        (
+          '⚠️ 左右判读与正面相反',
+          '背面拍摄时画面左边的腿是运动员的**左腿**。'
+              'App 已按拍摄视角做了转换，但你看图时仍要留意，'
+              '别和正面素材混着比较。',
+        ),
+        (
+          '不要把正面和背面的素材当成同一组数据',
+          '两者测的是同一类指标，但左右基准不同，'
+              '混在一起看会得出矛盾的结论。',
+        ),
       ],
     ),
   };
@@ -1436,13 +1610,19 @@ class _ShootingGuide extends StatelessWidget {
         children: [
           const Row(
             children: [
-              Icon(Icons.tips_and_updates_outlined,
-                  size: 18, color: Color(0xFF2E7D32)),
+              Icon(
+                Icons.tips_and_updates_outlined,
+                size: 18,
+                color: Color(0xFF2E7D32),
+              ),
               SizedBox(width: 6),
-              Text('拍摄要点',
-                  style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF2E7D32))),
+              Text(
+                '拍摄要点',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF2E7D32),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -1464,7 +1644,10 @@ class _ShootingGuide extends StatelessWidget {
             '三个视角量的东西不一样，不能混用。'
             '同一个指标换个视角拍，数值会完全变味。',
             style: TextStyle(
-                fontSize: 11.5, color: context.mutedText, height: 1.45),
+              fontSize: 11.5,
+              color: context.mutedText,
+              height: 1.45,
+            ),
           ),
           const SizedBox(height: 12),
 
@@ -1493,12 +1676,14 @@ class _GuideItem extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title,
-            style: const TextStyle(
-                fontSize: 13, fontWeight: FontWeight.w500)),
-        Text(detail,
-            style: TextStyle(
-                fontSize: 12, color: context.mutedText, height: 1.4)),
+        Text(
+          title,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+        ),
+        Text(
+          detail,
+          style: TextStyle(fontSize: 12, color: context.mutedText, height: 1.4),
+        ),
       ],
     );
   }
@@ -1527,10 +1712,7 @@ class _GuideSectionTitle extends StatelessWidget {
 /// 可折叠 —— 三个视角全展开会让这一屏特别长，
 /// 而用户一次只拍一个视角，没必要看另外两个的细节。
 class _ViewGuideCard extends StatelessWidget {
-  const _ViewGuideCard({
-    required this.data,
-    required this.initiallyExpanded,
-  });
+  const _ViewGuideCard({required this.data, required this.initiallyExpanded});
 
   final _ViewGuide data;
   final bool initiallyExpanded;
@@ -1545,9 +1727,7 @@ class _ViewGuideCard extends StatelessWidget {
           color: Colors.white.withValues(alpha: 0.72),
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
-            color: initiallyExpanded
-                ? context.okText
-                : const Color(0x222E7D32),
+            color: initiallyExpanded ? context.okText : const Color(0x222E7D32),
             width: initiallyExpanded ? 1.3 : 1,
           ),
         ),
@@ -1560,21 +1740,25 @@ class _ViewGuideCard extends StatelessWidget {
             children: [
               Icon(data.icon, size: 16, color: context.okText),
               const SizedBox(width: 6),
-              Text(data.label,
-                  style: const TextStyle(
-                      fontSize: 13.5, fontWeight: FontWeight.w600)),
+              Text(
+                data.label,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               if (initiallyExpanded) ...[
                 const SizedBox(width: 6),
                 Container(
-                  padding: EdgeInsets.symmetric(
-                      horizontal: 6, vertical: 1),
+                  padding: EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                   decoration: BoxDecoration(
                     color: context.okText,
                     borderRadius: BorderRadius.circular(3),
                   ),
-                  child: const Text('当前选择',
-                      style:
-                          TextStyle(fontSize: 10, color: Colors.white)),
+                  child: const Text(
+                    '当前选择',
+                    style: TextStyle(fontSize: 10, color: Colors.white),
+                  ),
                 ),
               ],
             ],

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -126,15 +127,15 @@ class JobProgress {
   bool get isFinished => isDone || isFailed;
 
   static JobProgress fromJson(Map<String, dynamic> json) => JobProgress(
-        jobId: json['job_id'] as String? ?? '',
-        status: json['status'] as String? ?? 'unknown',
-        progress: ((json['progress'] as num?)?.toDouble() ?? 0).clamp(0, 1),
-        stage: json['stage'] as String? ?? '',
-        error: json['error'] as String?,
-        errorDetail: json['error_detail'] as String?,
-        report: (json['report'] as Map?)?.cast<String, dynamic>(),
-        elapsedSeconds: (json['elapsed_s'] as num?)?.toDouble(),
-      );
+    jobId: json['job_id'] as String? ?? '',
+    status: json['status'] as String? ?? 'unknown',
+    progress: ((json['progress'] as num?)?.toDouble() ?? 0).clamp(0, 1),
+    stage: json['stage'] as String? ?? '',
+    error: json['error'] as String?,
+    errorDetail: json['error_detail'] as String?,
+    report: (json['report'] as Map?)?.cast<String, dynamic>(),
+    elapsedSeconds: (json['elapsed_s'] as num?)?.toDouble(),
+  );
 }
 
 /// 分析服务客户端。
@@ -143,7 +144,8 @@ class JobProgress {
 /// 界面不直接用这个类 —— 它只依赖 AnalysisRepository 接口，
 /// 这样从假数据切到真服务时业务代码不用改。
 class AnalysisServerClient {
-  AnalysisServerClient({http.Client? client}) : _client = client ?? http.Client();
+  AnalysisServerClient({http.Client? client})
+    : _client = client ?? http.Client();
 
   final http.Client _client;
 
@@ -172,20 +174,11 @@ class AnalysisServerClient {
         jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>,
       );
     } on SocketException {
-      throw ServerException(
-        '连不上这个地址',
-        hint: '确认电脑上已启动分析服务，且手机与电脑在同一个 WiFi。',
-      );
+      throw ServerException('连不上这个地址', hint: '确认电脑上已启动分析服务，且手机与电脑在同一个 WiFi。');
     } on TimeoutException {
-      throw ServerException(
-        '连接超时',
-        hint: '地址可能不对，或电脑防火墙拦住了。',
-      );
+      throw ServerException('连接超时', hint: '地址可能不对，或电脑防火墙拦住了。');
     } on FormatException {
-      throw ServerException(
-        '返回的不是预期的数据',
-        hint: '这个地址上可能不是 YUcoach 分析服务。',
-      );
+      throw ServerException('返回的不是预期的数据', hint: '这个地址上可能不是 YUcoach 分析服务。');
     }
   }
 
@@ -209,8 +202,9 @@ class AnalysisServerClient {
 
     final request = http.StreamedRequest('POST', uri);
     request.headers['Content-Type'] = 'application/octet-stream';
-    request.headers['X-Filename'] =
-        Uri.encodeComponent(file.uri.pathSegments.last);
+    request.headers['X-Filename'] = Uri.encodeComponent(
+      file.uri.pathSegments.last,
+    );
     request.contentLength = size;
 
     // 一边读一边发。用 pipe 而不是先读后发，避免整块驻留内存。
@@ -228,15 +222,9 @@ class AnalysisServerClient {
     try {
       resp = await _client.send(request).timeout(_uploadTimeout(size));
     } on SocketException {
-      throw ServerException(
-        '上传中断，连不上服务',
-        hint: '检查 WiFi 是否还连着，以及分析服务是否仍在运行。',
-      );
+      throw ServerException('上传中断，连不上服务', hint: '检查 WiFi 是否还连着，以及分析服务是否仍在运行。');
     } on TimeoutException {
-      throw ServerException(
-        '上传超时',
-        hint: '文件较大或网络较慢。可靠近路由器再试，或改用更短的片段。',
-      );
+      throw ServerException('上传超时', hint: '文件较大或网络较慢。可靠近路由器再试，或改用更短的片段。');
     }
 
     final body = await resp.stream.bytesToString();
@@ -249,6 +237,40 @@ class AnalysisServerClient {
       );
     }
     return json['video_id'] as String;
+  }
+
+  Future<Map<String, dynamic>> reviewMetadata(
+    String baseUrl,
+    String videoId,
+  ) async {
+    final resp = await _client
+        .get(
+          Uri.parse(
+            '${ServerConfig.normalize(baseUrl)}/api/videos/$videoId/metadata',
+          ),
+        )
+        .timeout(const Duration(minutes: 3));
+    final json = _decode(utf8.decode(resp.bodyBytes), resp.statusCode);
+    if (resp.statusCode != 200) {
+      throw ServerException(json['error'] as String? ?? '无法检查视频');
+    }
+    return json;
+  }
+
+  Future<Uint8List> reviewFrame(
+    String baseUrl,
+    String videoId,
+    int frame,
+  ) async {
+    final resp = await _client
+        .get(
+          Uri.parse(
+            '${ServerConfig.normalize(baseUrl)}/api/videos/$videoId/frames/$frame',
+          ),
+        )
+        .timeout(const Duration(seconds: 45));
+    if (resp.statusCode != 200) throw ServerException('读取视频帧失败，请重试');
+    return resp.bodyBytes;
   }
 
   // -- 提交分析 -----------------------------------------------------------
@@ -276,10 +298,19 @@ class AnalysisServerClient {
     bool? cameraFollowed,
     String? sessionId,
     String teamId = 't_local',
+    String estimator = 'yolo',
+    String model = 'yolov8n-pose.pt',
+    int imgsz = 960,
+    String rtmMode = 'lightweight',
+    Map<String, dynamic>? manualReview,
+    Map<String, dynamic>? targetSelection,
   }) async {
     final uri = Uri.parse('${ServerConfig.normalize(baseUrl)}/api/analyze');
     final payload = <String, dynamic>{
       'video_id': videoId,
+      if (manualReview != null) 'analysis_mode': 'manual_side_v1',
+      'manual_review': ?manualReview,
+      'target_selection': ?targetSelection,
       'athlete_id': athleteId,
       'athlete_name': athleteName,
       'gender': gender,
@@ -288,6 +319,10 @@ class AnalysisServerClient {
       'view': view,
       'test_type': testType,
       'team_id': teamId,
+      'estimator': estimator,
+      if (estimator == 'yolo') 'model': model,
+      if (estimator == 'yolo') 'imgsz': imgsz,
+      if (estimator == 'rtm') 'rtm_mode': rtmMode,
     };
     if (username != null && username.trim().isNotEmpty) {
       payload['username'] = username.trim();
@@ -329,8 +364,7 @@ class AnalysisServerClient {
     required String baseUrl,
     required String jobId,
   }) async {
-    final uri =
-        Uri.parse('${ServerConfig.normalize(baseUrl)}/api/jobs/$jobId');
+    final uri = Uri.parse('${ServerConfig.normalize(baseUrl)}/api/jobs/$jobId');
     try {
       final resp = await _client.get(uri).timeout(_timeout);
       final json = _decode(utf8.decode(resp.bodyBytes), resp.statusCode);
@@ -385,10 +419,7 @@ class AnalysisServerClient {
       }
       await Future<void>.delayed(interval);
     }
-    throw ServerException(
-      '分析超时',
-      hint: '素材可能过长或服务负载高。可以试试更短的片段。',
-    );
+    throw ServerException('分析超时', hint: '素材可能过长或服务负载高。可以试试更短的片段。');
   }
 
   void close() => _client.close();
@@ -402,9 +433,7 @@ class AnalysisServerClient {
       if (decoded is Map<String, dynamic>) return decoded;
       return {'error': '服务返回了非预期的数据结构'};
     } on FormatException {
-      return {
-        'error': '服务返回的内容不是 JSON（HTTP $status）',
-      };
+      return {'error': '服务返回的内容不是 JSON（HTTP $status）'};
     }
   }
 }

@@ -95,6 +95,7 @@ class PoseSequence:
     estimator_name: str = ""
     estimator_version: str = ""
     notes: list[str] = field(default_factory=list)
+    model_config: str = ""
 
     def __len__(self) -> int:
         return len(self.frames)
@@ -135,6 +136,7 @@ class PoseEstimator(ABC):
 
     #: 实现名称，写入报告用于溯源
     name: str = "unnamed"
+    model_config: str = ""
     #: 版本号。模型换了必须改，否则无法回答"为什么这次结果和上次不同"
     version: str = "0.0.0"
     #: 该实现是否提供真实的足部关键点（而非几何推导）
@@ -154,6 +156,7 @@ class PoseEstimator(ABC):
         seq = PoseSequence(
             estimator_name=self.name,
             estimator_version=self.version,
+            model_config=self.model_config,
         )
 
         if not self.provides_foot_keypoints:

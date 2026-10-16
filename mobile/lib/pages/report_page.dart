@@ -216,17 +216,19 @@ class _Header extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '${s.athlete.name} · ${s.athlete.event} · 加速段技术',
-          style: theme.textTheme.titleLarge
-              ?.copyWith(fontWeight: FontWeight.w600),
+          '${s.athlete.name} · ${s.athlete.event} · ${result.versions.modelVersion.contains('manual-contact') ? '人工确认计时' : '运动分析'}',
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
         ),
         SizedBox(height: 4),
         Row(
           children: [
             Text(
               s.recordedAt.split('T').first,
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: context.mutedText),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: context.mutedText,
+              ),
             ),
             const SizedBox(width: 12),
             _Chip(label: '${viewLabel(s.view)}视角'),
@@ -272,15 +274,17 @@ class _Summary extends StatelessWidget {
         children: [
           Text(
             s.headline,
-            style: theme.textTheme.titleMedium
-                ?.copyWith(fontWeight: FontWeight.w600),
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
           ),
           SizedBox(height: 8),
           Text(
             '发现 ${s.majorCount + s.minorCount} 处可改进'
             '${insufficient > 0 ? " · $insufficient 项数据不足" : ""}',
-            style: theme.textTheme.bodyMedium
-                ?.copyWith(color: context.mutedText),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: context.mutedText,
+            ),
           ),
         ],
       ),
@@ -307,7 +311,8 @@ class _KeyframeSection extends StatelessWidget {
     if (keyframes.isEmpty) {
       // 数据不足时没有关键帧。不能留白 —— 留白会被理解成「系统坏了」。
       return const _Placeholder(
-        text: '本次没有可用的关键帧。\n'
+        text:
+            '本次没有可用的关键帧。\n'
             '关键帧来自识别出的着地、离地等动作时刻；'
             '本次素材未能识别出完整步次，因此无法生成图解。',
       );
@@ -315,11 +320,13 @@ class _KeyframeSection extends StatelessWidget {
 
     return Column(
       children: keyframes
-          .map((k) => _KeyframeCard(
-                keyframe: k,
-                view: result.session.view,
-                resolveImage: resolveImage,
-              ))
+          .map(
+            (k) => _KeyframeCard(
+              keyframe: k,
+              view: result.session.view,
+              resolveImage: resolveImage,
+            ),
+          )
           .toList(),
     );
   }
@@ -343,35 +350,37 @@ class _KeyframeImage extends StatelessWidget {
     final theme = Theme.of(context);
 
     Widget message(IconData icon, String title, String hint) => Container(
-          height: 180,
-          width: double.infinity,
-          decoration: BoxDecoration(
-            color: context.subtleSurface,
-            borderRadius: BorderRadius.circular(6),
+      height: 180,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: context.subtleSurface,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 28, color: context.faintText),
+          const SizedBox(height: 8),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: context.mutedText,
+            ),
           ),
-          alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 28, color: context.faintText),
-              const SizedBox(height: 8),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(color: context.mutedText),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                hint,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: context.faintText),
-              ),
-            ],
+          const SizedBox(height: 4),
+          Text(
+            hint,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: context.faintText,
+            ),
           ),
-        );
+        ],
+      ),
+    );
 
     final u = url;
     if (u == null || u.isEmpty) {
@@ -450,8 +459,9 @@ class _KeyframeCard extends StatelessWidget {
                   '${eventLabel(keyframe.event)} · '
                   '第 ${keyframe.stepIndex ?? "?"} 步 · '
                   '${phaseLabel(keyframe.phase)}',
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(fontWeight: FontWeight.w500),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
                 Spacer(),
                 _Chip(label: '${viewLabel(view)}视角'),
@@ -487,8 +497,9 @@ class _KeyframeCard extends StatelessWidget {
                 Text(
                   '0.5 m'
                   '${keyframe.pixelsPerMeter != null ? "（${keyframe.pixelsPerMeter!.round()} px/m）" : ""}',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: context.mutedText),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: context.mutedText,
+                  ),
                 ),
               ],
             ),
@@ -499,12 +510,20 @@ class _KeyframeCard extends StatelessWidget {
               spacing: 16,
               runSpacing: 4,
               children: keyframe.annotations
-                  .map((a) => Text(
-                        '${a.metricId == "shank_angle_touchdown" ? "胫骨角" : a.metricId == "knee_angle_touchdown" ? "膝角" : a.metricId == "trunk_lean" ? "躯干前倾" : a.metricId} '
-                        '${a.value.toStringAsFixed(1)}${unitLabel(a.unit)}'
-                        '${a.refLow != null ? "  [标准 ${a.refLow!.toStringAsFixed(0)}–${a.refHigh!.toStringAsFixed(0)}°]" : ""}',
-                        style: theme.textTheme.bodyMedium,
-                      ))
+                  .map(
+                    (a) => Text(
+                      '${a.metricId == "shank_angle_touchdown"
+                          ? "胫骨角"
+                          : a.metricId == "knee_angle_touchdown"
+                          ? "膝角"
+                          : a.metricId == "trunk_lean"
+                          ? "躯干前倾"
+                          : a.metricId} '
+                      '${a.value.toStringAsFixed(1)}${unitLabel(a.unit)}'
+                      '${a.refLow != null ? "  [标准 ${a.refLow!.toStringAsFixed(0)}–${a.refHigh!.toStringAsFixed(0)}°]" : ""}',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  )
                   .toList(),
             ),
           ),
@@ -525,8 +544,11 @@ class _FindingsSection extends StatelessWidget {
 
     // 报告主体最多 3 条：给教练 10 条问题等于没给，他一条都不会改。
     final actionable = findings
-        .where((f) =>
-            f.severity == FindingSeverity.major || f.severity == FindingSeverity.minor)
+        .where(
+          (f) =>
+              f.severity == FindingSeverity.major ||
+              f.severity == FindingSeverity.minor,
+        )
         .take(3)
         .toList();
     final insufficient = findings
@@ -539,7 +561,9 @@ class _FindingsSection extends StatelessWidget {
         ...actionable.map((f) => FindingCard(finding: f)),
         if (actionable.isEmpty && insufficient.isEmpty)
           const _Placeholder(text: '本次未生成结论。'),
-        ...insufficient.map((f) => FindingCard(finding: f, isInsuffcient: true)),
+        ...insufficient.map(
+          (f) => FindingCard(finding: f, isInsuffcient: true),
+        ),
       ],
     );
   }
@@ -567,30 +591,45 @@ class _Appendix extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('附录 · 数据可信度',
-              style: theme.textTheme.titleSmall
-                  ?.copyWith(fontWeight: FontWeight.w600)),
+          Text(
+            '附录 · 数据可信度',
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 8),
           // 帧率是必填字段（可空类型表示值本身可为 null），故用直接访问
-          _kv(context, '帧率声明 / 校验',
-              '${s.capture.fpsDeclared?.toStringAsFixed(1) ?? "未知"} fps → '
-              '${s.capture.fpsVerified?.toStringAsFixed(1) ?? "无法校验"} fps'),
+          _kv(
+            context,
+            '帧率声明 / 校验',
+            '${s.capture.fpsDeclared?.toStringAsFixed(1) ?? "未知"} fps → '
+                '${s.capture.fpsVerified?.toStringAsFixed(1) ?? "无法校验"} fps',
+          ),
           _kv(context, '帧率校验方法', v.methods.map((m) => m.toJson()).join('、')),
           _kv(context, '校验一致性', '${v.agreementPct.toStringAsFixed(1)}%'),
           _kv(context, '镜头运动', cameraMotionLabel(s.cameraMotion.level)),
           _kv(context, '参考尺度', referenceScaleLabel(s.referenceScale.method)),
-          _kv(context, '畸变校正', s.capture.distortionCorrected == true ? '已执行' : '未执行'),
+          _kv(
+            context,
+            '畸变校正',
+            s.capture.distortionCorrected == true ? '已执行' : '未执行',
+          ),
           if (result.perspectiveErrorEstimate != null)
-            _kv(context, '透视误差量级',
-                '±${result.perspectiveErrorEstimate!.toStringAsFixed(1)}°'),
+            _kv(
+              context,
+              '透视误差量级',
+              '±${result.perspectiveErrorEstimate!.toStringAsFixed(1)}°',
+            ),
           SizedBox(height: 12),
           Text(
             '本报告基于二维视频分析，用于技术动作的观察与趋势对比。'
             '不构成医学诊断，不替代教练的专业判断，'
             '不可用于反推地面反作用力或关节负荷。'
             '可靠性等级为 C 的指标仅适用于趋势对比。',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: context.mutedText, height: 1.5),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: context.mutedText,
+              height: 1.5,
+            ),
           ),
         ],
       ),
@@ -598,18 +637,18 @@ class _Appendix extends StatelessWidget {
   }
 
   Widget _kv(BuildContext context, String k, String v) => Padding(
-        padding: const EdgeInsets.only(bottom: 4),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 110,
-              child: Text(k, style: TextStyle(color: context.mutedText)),
-            ),
-            Expanded(child: Text(v)),
-          ],
+    padding: const EdgeInsets.only(bottom: 4),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 110,
+          child: Text(k, style: TextStyle(color: context.mutedText)),
         ),
-      );
+        Expanded(child: Text(v)),
+      ],
+    ),
+  );
 }
 
 class _Placeholder extends StatelessWidget {
@@ -641,12 +680,10 @@ class _SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Text(
-        text,
-        style: Theme.of(context)
-            .textTheme
-            .titleMedium
-            ?.copyWith(fontWeight: FontWeight.w600),
-      );
+    text,
+    style: Theme.of(context).textTheme.titleMedium
+        ?.copyWith(fontWeight: FontWeight.w600),
+  );
 }
 
 class _ViewGroupLabel extends StatelessWidget {
@@ -656,16 +693,16 @@ class _ViewGroupLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 6),
-        child: Text(
-          text,
-          style: TextStyle(
-            fontSize: 13,
-            color: context.faintText,
-            letterSpacing: 0.5,
-          ),
-        ),
-      );
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Text(
+      text,
+      style: TextStyle(
+        fontSize: 13,
+        color: context.faintText,
+        letterSpacing: 0.5,
+      ),
+    ),
+  );
 }
 
 class _Chip extends StatelessWidget {
@@ -675,13 +712,13 @@ class _Chip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          color: context.okSurface,
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Text(label, style: const TextStyle(fontSize: 12)),
-      );
+    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+    decoration: BoxDecoration(
+      color: context.okSurface,
+      borderRadius: BorderRadius.circular(4),
+    ),
+    child: Text(label, style: const TextStyle(fontSize: 12)),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -689,42 +726,43 @@ class _Chip extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 String viewLabel(SessionView v) => switch (v) {
-      SessionView.side => '侧面',
-      SessionView.front => '正面',
-      SessionView.back => '背面',
-    };
+  SessionView.side => '侧面',
+  SessionView.front => '正面',
+  SessionView.back => '背面',
+};
 
 String eventLabel(TimeBaseEvent e) => switch (e) {
-      TimeBaseEvent.touchdown => '着地',
-      TimeBaseEvent.midstance => '支撑中期',
-      TimeBaseEvent.toeOff => '离地',
-      TimeBaseEvent.swingPeak => '摆动最高点',
-      TimeBaseEvent.setPosition => '预备就位',
-      TimeBaseEvent.gunFire => '发令',
-      TimeBaseEvent.blockClearance => '蹬离起跑器',
-      TimeBaseEvent.finish => '终点',
-    };
+  TimeBaseEvent.touchdown => '着地',
+  TimeBaseEvent.midstance => '支撑中期',
+  TimeBaseEvent.toeOff => '离地',
+  TimeBaseEvent.swingPeak => '摆动最高点',
+  TimeBaseEvent.setPosition => '预备就位',
+  TimeBaseEvent.gunFire => '发令',
+  TimeBaseEvent.blockClearance => '蹬离起跑器',
+  TimeBaseEvent.finish => '终点',
+};
 
 String phaseLabel(MetricPhase p) => switch (p) {
-      MetricPhase.setValue => '预备',
-      MetricPhase.start => '起动',
-      MetricPhase.acceleration => '加速段',
-      MetricPhase.transition => '过渡段',
-      MetricPhase.maxVelocity => '途中跑',
-      MetricPhase.deceleration => '减速段',
-    };
+  MetricPhase.setValue => '预备',
+  MetricPhase.start => '起动',
+  MetricPhase.acceleration => '加速段',
+  MetricPhase.transition => '过渡段',
+  MetricPhase.maxVelocity => '途中跑',
+  MetricPhase.deceleration => '减速段',
+  MetricPhase.wholeRun => '所选区间（未分期）',
+};
 
 String cameraMotionLabel(CameraMotionLevel? l) => switch (l) {
-      CameraMotionLevel.fixed => '固定机位',
-      CameraMotionLevel.slightPan => '轻度跟随',
-      CameraMotionLevel.strongPan => '明显跟随（精度受限）',
-      null => '未知',
-    };
+  CameraMotionLevel.fixed => '固定机位',
+  CameraMotionLevel.slightPan => '轻度跟随',
+  CameraMotionLevel.strongPan => '明显跟随（精度受限）',
+  null => '未知',
+};
 
 String referenceScaleLabel(ReferenceScaleMethod? m) => switch (m) {
-      ReferenceScaleMethod.laneLine => '跑道分道线（精度高）',
-      ReferenceScaleMethod.calibrationRod => '标定杆',
-      ReferenceScaleMethod.heightDerived => '由身高推算（误差约 5-10%）',
-      ReferenceScaleMethod.none => '无（位移类指标不可用）',
-      null => '未知',
-    };
+  ReferenceScaleMethod.laneLine => '跑道分道线（精度高）',
+  ReferenceScaleMethod.calibrationRod => '标定杆',
+  ReferenceScaleMethod.heightDerived => '由身高推算（误差约 5-10%）',
+  ReferenceScaleMethod.none => '无（位移类指标不可用）',
+  null => '未知',
+};

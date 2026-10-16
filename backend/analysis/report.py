@@ -30,7 +30,7 @@ from .pose_types import PoseSequence
 from .reference_scale import ScaleEstimate
 from .video_io import VideoInfo
 
-SCHEMA_VERSION = "1.1.0"
+SCHEMA_VERSION = "1.2.0"
 
 # 分析引擎各组件版本。写入报告用于回答"为什么这次和上次不一样"。
 #
@@ -44,8 +44,8 @@ SCHEMA_VERSION = "1.1.0"
 #    现在由 build_versions() 从 inp.seq 取（PoseSequence 本来就带着
 #    estimator_name / estimator_version，信息一直在手边）。
 VERSIONS = {
-    "algo_version": "0.2.0",
-    "rule_version": "0.1.0",
+    "algo_version": "0.4.0",
+    "rule_version": "0.3.0",
     "std_version": "0.1.0",
 }
 
@@ -68,7 +68,11 @@ def build_versions(seq: PoseSequence) -> dict[str, str]:
         # 如实写 unknown，不冒充某个具体模型。
         model_version = "unknown"
 
-    return {**VERSIONS, "model_version": model_version}
+    config = (getattr(seq, "model_config", "") or "").strip()
+    if config:
+        model_version += f" [{config}]"
+    from .rules import RULE_VERSION
+    return {**VERSIONS, "model_version": model_version, "rule_version": RULE_VERSION}
 
 
 @dataclass
@@ -100,6 +104,11 @@ class ReportInputs:
     camera_height_m: float | None = None
     has_lane_line: bool | None = None
     camera_followed: bool | None = None
+    athlete_age: float | None = None
+    running_condition: str | None = None
+    load_protocol: str | None = None
+    complete_run: bool = False
+    population_confirmed: bool = False
 
     notes: list[str] = field(default_factory=list)
 
@@ -216,8 +225,6 @@ def build_session_block(inp: ReportInputs) -> dict:
         capture.setdefault("camera", {})["distance_m"] = inp.camera_distance_m
     if inp.camera_height_m is not None:
         capture.setdefault("camera", {})["height_m"] = inp.camera_height_m
-    if inp.camera_followed is not None:
-        capture.setdefault("camera", {})["followed_athlete"] = inp.camera_followed
 
     # 镜头运动：规范到契约枚举，并对"估计失败"给出说明
     motion_level, motion_note = _canonical_motion_level(inp.camera_motion_level)
@@ -329,13 +336,13 @@ def build_summary(
     if major > 0:
         headline = f"发现 {major} 处需要优先处理的问题"
     elif minor > 0:
-        headline = f"整体技术动作良好，有 {minor} 处可以进一步优化"
+        headline = f"发现 {minor} 处参考偏差，请结合测量可靠性复核"
     elif insufficient == len(results):
         # 一项都没测出来时，绝不能写成"没有问题" ——
         # 那是最严重的误读
         headline = "本次素材未能测出有效指标，请按建议重新拍摄"
     else:
-        headline = "各项指标均在合理范围内"
+        headline = "本次未触发偏差规则；不代表所有指标均正常，请查看参考适用条件"
 
     return {
         "headline": headline,
@@ -375,6 +382,8 @@ def build_metrics(
             continue
 
         d = r.to_contract_dict(spec, ctx.view)
+        if ctx.manual_events is not None:
+            d["phase"] = "whole_run"
 
         # 按相位细化：把 aggregate 里的相位统计展开成独立条目，
         # 因为**同一个数值在不同相位含义可能相反**（尤其是躯干前倾）。
@@ -454,12 +463,21 @@ def build_report(
             camera_motion_shift=inp.camera_motion_shift,
         )
 
+    # 外部复用上下文也必须采用本次报告的人群信息。
+    ctx.athlete_gender = inp.athlete_gender if inp.population_confirmed else None
+    ctx.athlete_event = inp.athlete_event if inp.population_confirmed else None
+    ctx.athlete_level = inp.athlete_level if inp.population_confirmed else None
+    ctx.athlete_age = inp.athlete_age
+    ctx.running_condition = inp.running_condition
+    ctx.load_protocol = inp.load_protocol
+    ctx.complete_run = inp.complete_run
+
     # 2. 全部指标
     results = compute_all_metrics(ctx)
 
     # 3. 规则引擎（下一步实现；当前返回空列表）
     from .rules import evaluate_rules
-    findings = evaluate_rules(ctx, results)
+    findings = [] if ctx.manual_events is not None else evaluate_rules(ctx, results)
 
     # 4. 质量分
     quality, breakdown = compute_quality_score(inp, results)
@@ -485,6 +503,16 @@ def build_report(
         "summary": build_summary(results, findings),
         "keyframes": keyframes or [],
     }
+
+    if ctx.manual_events is not None:
+        report["summary"]["headline"] = "人工确认时间指标；未进行技术优劣评价"
+        session["camera_motion"]["detected_by"] = "manual"
+        session["camera_motion"]["note"] = "固定侧面由标注者确认；未自动检测机位。"
+        session["capture"]["fps_verify"]["note"] = (
+            "逐帧解码检查恒定且连续的容器时间戳；标注者确认文件帧率等于原始拍摄帧率。"
+            "容器时间戳不能独立证明真实拍摄帧率，不能识别所有重复帧、补帧或变速。")
+        # A guessed perspective error has no place in an event timing report.
+        return report
 
     # 透视误差：镜头偏离画面中心越远误差越大。
     # 这里给一个基于镜头运动的粗略估计，而不是假装精确。

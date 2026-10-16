@@ -72,6 +72,9 @@ class YoloPoseEstimator(PoseEstimator):
         os.environ["YOLO_CONFIG_DIR"] = str(YOLO_CONFIG_PATH)
 
         from ultralytics import YOLO
+        import ultralytics
+
+        self.version = ultralytics.__version__
 
         # ultralytics 的 datasets_dir / weights_dir / runs_dir 不受
         # 环境变量控制，默认会在当前工作目录建文件夹。必须显式改掉。
@@ -106,6 +109,7 @@ class YoloPoseEstimator(PoseEstimator):
             self.weights_path = str(Path(self._model.ckpt_path))
         except Exception:
             self.weights_path = model_name
+        self.model_config = f"weights={Path(self.weights_path).name}; imgsz={self.imgsz}"
 
     # ------------------------------------------------------------------
 
@@ -119,17 +123,20 @@ class YoloPoseEstimator(PoseEstimator):
             verbose=self.verbose,
         )
         if not results:
+            if getattr(self, "target_lock", None) is not None:
+                self.target_lock.select(frame_bgr, frame_index, np.empty((0, 4)))
             return None
 
         r = results[0]
         if r.keypoints is None or len(r.keypoints) == 0:
+            if getattr(self, "target_lock", None) is not None:
+                self.target_lock.select(frame_bgr, frame_index, np.empty((0, 4)))
             return None
 
         h, w = frame_bgr.shape[:2]
 
-        # 一帧里检出多个人时选**面积最大的**。
-        # 依据：这是单人分析场景，运动员通常是画面主体。
-        # 若将来需要多人同场，这里要改成按号码布/轨迹跟踪选人。
+        # Explicit selection uses persistent association. The legacy area
+        # fallback is only retained for callers that supplied no target.
         kp_xy = r.keypoints.xy.cpu().numpy()        # (N, 17, 2) 像素坐标
         kp_conf = r.keypoints.conf
         if kp_conf is None:
@@ -141,11 +148,20 @@ class YoloPoseEstimator(PoseEstimator):
         if boxes is not None and len(boxes) >= 1:
             xyxy = boxes.xyxy.cpu().numpy()
             areas = (xyxy[:, 2] - xyxy[:, 0]) * (xyxy[:, 3] - xyxy[:, 1])
-            pick = int(np.argmax(areas))
+            lock = getattr(self, "target_lock", None)
+            if lock is not None:
+                candidates = xyxy.astype(float, copy=True)
+                # Do not associate a box whose torso pose is effectively absent.
+                candidates[np.min(kp_conf[:, [5, 6, 11, 12]], axis=1) < .3] = np.nan
+                pick = lock.select(frame_bgr, frame_index, candidates)
+            else:
+                pick = int(np.argmax(areas))
             person_conf = float(boxes.conf[pick].cpu().numpy())
             b = xyxy[pick]
             bbox = (b[0] / w, b[1] / h, b[2] / w, b[3] / h)
         else:
+            if getattr(self, "target_lock", None) is not None:
+                self.target_lock.select(frame_bgr, frame_index, np.empty((0, 4)))
             pick = 0
             person_conf = None
             bbox = None
@@ -176,6 +192,7 @@ class YoloPoseEstimator(PoseEstimator):
         seq = PoseSequence(
             estimator_name=self.name,
             estimator_version=self.version,
+            model_config=self.model_config,
         )
         seq.notes.append(
             f"姿态模型 {self.name}（{Path(self.weight_file).name}）"

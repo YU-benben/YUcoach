@@ -23,6 +23,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+import re
 from typing import Any
 
 import yaml
@@ -188,6 +189,12 @@ class StandardEntry:
     #:
     #: 取值见 VALID_WINDOWS。空字符串表示未声明（会告警，不阻塞）。
     window: str = ""
+    # 缺失条件的旧文献可保存，但不能自动参与判定。
+    running_condition: str = "unspecified"
+    step_number: int | None = None
+    load_protocol: str | None = None
+
+
 
     def citation(self) -> str:
         """完整出处（含作者与 DOI）。用于开发排查与元数据导出。"""
@@ -252,36 +259,47 @@ class StandardsLibrary:
         view: str,
         phase: str,
         level: str | None = None,
+        *,
+        gender: str | None = None,
+        event: str | None = None,
+        age: float | None = None,
+        window: str | None = None,
+        running_condition: str | None = None,
+        step_number: int | None = None,
+        load_protocol: str | None = None,
     ) -> StandardEntry | None:
         """
-        按 指标 + 视角 + 相位 查找标准值。
+        仅返回完全匹配且唯一的参考。未知条件不是通配符。
 
-        相位匹配规则（顺序不能反）：
-          1. 先找 phase 精确匹配的
-          2. 再找 phase == whole_run 的（全程平均值可适用于任意阶段，
-             但**必须**在 measurement_note 里说明它是全程值）
-
-        视角匹配是**硬性**的：同一个指标名在不同视角下是完全不同的
-        几何量，不能互相替代。
-
-        找不到返回 None —— 由调用方决定"不做偏离判断"，
-        而不是给一个默认值。
+        whole_run不再替代具体阶段；混合性别人群不替代男女分组。
+        未注明年龄限制的文献不限制年龄；注明范围则必须知道实际年龄。
+        多个同口径来源暂不自动择优，避免由文件排序决定结论。
         """
-        # 1. 精确匹配（视角 + 相位 + 水平）
-        for want_level in ([level] if level else []) + [None]:
-            for e in self.entries:
-                if (e.metric_id == metric_id and e.view == view
-                        and e.phase == phase
-                        and (want_level is None or e.level == want_level)):
-                    return e
-
-        # 2. 退回 whole_run（全程平均值）
+        if (level not in VALID_LEVELS or gender not in {"male", "female"}
+                or event not in VALID_EVENTS
+                or window not in VALID_WINDOWS - {"unspecified"}
+                or running_condition not in {"unloaded", "resisted", "assisted"}):
+            return None
+        if step_number is not None and (type(step_number) is not int or step_number < 1):
+            return None
+        if age is not None and (type(age) not in (int, float) or not 0 < age < 120):
+            return None
+        if running_condition != "unloaded" and not load_protocol:
+            return None
+        matches = []
         for e in self.entries:
-            if (e.metric_id == metric_id and e.view == view
-                    and e.phase == "whole_run"):
-                return e
-
-        return None
+            if (e.metric_id != metric_id or e.view != view or e.phase != phase
+                    or e.level != level or e.gender != gender or e.event != event
+                    or e.window != window or e.running_condition != running_condition
+                    or e.step_number != step_number or e.load_protocol != load_protocol):
+                continue
+            if e.age_range:
+                limits = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)\s*", str(e.age_range))
+                if (not limits or age is None or isinstance(age, bool)
+                        or not float(limits[1]) <= age <= float(limits[2])):
+                    continue
+            matches.append(e)
+        return matches[0] if len(matches) == 1 else None
 
     def stats(self) -> dict[str, Any]:
         by_phase: dict[str, int] = {}
@@ -363,6 +381,22 @@ def _validate_entry(
             f"window 取值非法：「{window}」。"
             f"合法值：{sorted(VALID_WINDOWS)}"
         )
+
+    running_condition = raw.get("running_condition", "unspecified")
+    if running_condition not in {"unloaded", "resisted", "assisted", "unspecified"}:
+        return problem("running_condition 必须为 unloaded/resisted/assisted/unspecified")
+    step_number = raw.get("step_number")
+    if step_number is not None and (type(step_number) is not int or step_number < 1):
+        return problem("step_number 必须为正整数")
+    if step_number is not None and window != "single_event":
+        return problem("指定 step_number 的条目必须使用 single_event 窗口")
+    load_protocol = raw.get("load_protocol")
+    if load_protocol is not None and (not isinstance(load_protocol, str) or not load_protocol.strip()):
+        return problem("load_protocol 必须为非空字符串")
+    if running_condition in {"resisted", "assisted"} and not load_protocol:
+        return problem("阻力/助力参考必须声明 load_protocol（具体负荷方案）")
+    if running_condition == "unloaded" and load_protocol is not None:
+        return problem("unloaded 不应声明负荷方案")
 
     # ---- 4. 出处必须可查证 ----
     src = raw.get("source") or {}
@@ -494,6 +528,9 @@ def _validate_entry(
         citation_zh=str(raw.get("citation_zh") or "").strip(),
         unit_note=note,
         window=window,
+        running_condition=running_condition,
+        step_number=step_number,
+        load_protocol=load_protocol,
     )
     return entry, None
 

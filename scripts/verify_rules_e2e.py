@@ -1,21 +1,12 @@
 """
-验证规则引擎在真实标准值下能产出结论。
+验证真实标准值在条件不足时不会产生错误结论。
 
-为什么需要这个脚本：
-    backend/tests/test_rules.py 用**临时造的标准值**测判定逻辑，
-    但那些标准值不在仓库里。所以它证明不了
-    「仓库里真实的标准值能让规则触发」。
-
-    这个脚本用 data/standards/ 里的真实标准值，
-    构造一个明确偏离的指标值，验证：
-      1. 规则确实触发
-      2. 结论里的出处、局限、处方都齐全
-      3. 结论通过契约校验
+真实库只审计已声明的条件，不在验证脚本中补造负荷、人群或测量窗口。
+正向规则触发、出处和契约结构由backend/tests/test_rules.py独立覆盖。
 """
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 
@@ -64,109 +55,45 @@ def _ctx() -> MetricContext:
 
 
 def main() -> int:
-    print("=" * 68)
-    print("规则引擎 · 真实标准值验证")
-    print("=" * 68)
-    print()
-
-    # ---- 情形 1：步频明显偏低，应当触发 ----
-    print("【情形 1】步频 180 步/分（标准值 259.4–283.8）")
-    metric = MetricResult(
-        metric_id="step_frequency", value=180.0,
-        confidence=0.85, reliable=True,
-    )
-    findings = evaluate_rules(_ctx(), [metric])
-
-    if not findings:
-        print("  [FAIL] 应当触发「步频偏低」，但没有产出任何结论")
+    """用真实库检查严格匹配，正向触发由隔离条件的单元测试覆盖。"""
+    from backend.standards.loader import load_standards
+    lib = load_standards()
+    if lib.problems:
+        print("[FAIL] 标准库校验失败")
         return 1
-
-    f = findings[0]
-    print(f"  [OK] 触发结论：{f['title']}（{f['severity']}）")
-    print(f"       依据：{f['evidence'][0]['deviation_text']}")
-    print(f"       置信度：{f['confidence']}")
-    print()
-
-    # ---- 情形 2：膝角明显偏大 ----
-    print("【情形 2】着地膝角 175°（标准值 133.1–166.7）")
-    m2 = MetricResult(
-        metric_id="knee_angle_touchdown", value=175.0,
-        confidence=0.8, reliable=True,
-    )
-    f2s = evaluate_rules(_ctx(), [m2])
-
-    # knee_angle_touchdown 有 4 条规则里的一条对应（direction=high）
-    if f2s:
-        f2 = f2s[0]
-        print(f"  [OK] 触发结论：{f2['title']}（{f2['severity']}）")
-        print(f"       依据：{f2['evidence'][0]['deviation_text']}")
-    else:
-        print("  [--] 未触发（可能是该指标没有对应规则）")
-    print()
-
-    # ---- 情形 3：值在区间内，不该触发 ----
-    print("【情形 3】步频 270 步/分（落在 259.4–283.8 内）")
-    m3 = MetricResult(metric_id="step_frequency", value=270.0,
-                      confidence=0.85, reliable=True)
-    if evaluate_rules(_ctx(), [m3]):
-        print("  [FAIL] 值在参考区间内，不该产出偏差结论")
-        return 1
-    print("  [OK] 未产出结论（符合预期）")
-    print()
-
-    # ---- 情形 4：没有标准值的指标，不该触发 ----
-    print("【情形 4】躯干前倾 3°（该指标刻意留空，无可用标准值）")
-    m4 = MetricResult(metric_id="trunk_lean", value=3.0,
-                      confidence=0.8, reliable=True)
-    if evaluate_rules(_ctx(), [m4]):
-        print("  [FAIL] 没有可查证标准值，不该产出偏差结论")
-        return 1
-    print("  [OK] 未产出结论 —— 没有出处就不做判断（铁律）")
-    print()
-
-    # ---- 检查结论的完整性 ----
-    print("=" * 68)
-    print("结论完整性检查")
-    print("=" * 68)
-    print()
-
-    problems = []
-    for finding in findings:
-        fid = finding["finding_id"]
-
-        if not finding.get("explanation") or len(finding["explanation"]) < 30:
-            problems.append(f"{fid} 机制解释太短")
-
-        if not finding.get("drills"):
-            problems.append(f"{fid} 没有训练处方")
-
-        caveat = finding.get("caveat") or ""
-        if "来源" not in caveat:
-            problems.append(f"{fid} 没有标注标准值出处")
-        if "样本" not in caveat and "局限" not in caveat:
-            problems.append(f"{fid} 没有说明标准值的局限")
-
-        for d in finding.get("drills", []):
-            if len(d["cue"]) > 20:
-                problems.append(f"{fid} 口令过长：{d['cue']}")
-
-    if problems:
-        print("[FAIL] 结论完整性有问题：")
-        for p in problems:
-            print(f"       {p}")
-        return 1
-
-    print(f"  [OK] {len(findings)} 条结论都含机制解释、训练处方、出处与局限")
-    print()
-
-    print("=" * 68)
-    print("示例结论（完整内容）")
-    print("=" * 68)
-    print()
-    print(json.dumps(findings[0], ensure_ascii=False, indent=2))
-    print()
-
-    print("[OK] 规则引擎在真实标准值下工作正常")
+    cases = [
+        MetricResult(metric_id="step_frequency", value=180,
+                     reference_phase="whole_run", reference_window="whole_run"),
+        MetricResult(metric_id="knee_angle_touchdown", value=175,
+                     reference_phase="max_velocity", reference_window="event_mean"),
+        MetricResult(metric_id="trunk_lean", value=3,
+                     reference_phase="acceleration", reference_window="whole_phase"),
+    ]
+    ctx = _ctx()
+    # 用户条件未知：真实文献不能越过人群/负荷条件产生结论。
+    for metric in cases:
+        if evaluate_rules(ctx, [metric]):
+            print(f"[FAIL] {metric.metric_id}: 未确认条件却产生判断")
+            return 1
+        if not metric.reliability_note:
+            print(f"[FAIL] {metric.metric_id}: 未说明参考缺失")
+            return 1
+    # 即使确认部分用户信息，旧文献缺失负荷条件也不能由程序补造。
+    ctx.athlete_gender = "male"
+    ctx.athlete_level = "elite"
+    ctx.athlete_event = "100m"
+    ctx.athlete_age = 25
+    ctx.running_condition = "unloaded"
+    unknown = [e for e in lib.entries if e.running_condition == "unspecified"]
+    for entry in unknown:
+        if lib.lookup(entry.metric_id, entry.view, entry.phase,
+                      level=entry.level, gender=entry.gender, event=entry.event,
+                      age=25, window=entry.window,
+                      running_condition="unloaded", step_number=entry.step_number):
+            print(f"[FAIL] {entry.metric_id}: 未注明负荷条件的参考参与判定")
+            return 1
+    print(f"[OK] 真实库{len(lib.entries)}条已审计，{len(unknown)}条负荷条件待核验")
+    print("[OK] 未确认的人群和窗口不产生偏差结论，测量值保留")
     return 0
 
 

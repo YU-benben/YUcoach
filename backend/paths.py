@@ -26,7 +26,7 @@ r"""
 ## 目录约定
 
     YUcoach/
-    ├── .cache/              所有生成物（可安全删除，删除后自动重建）
+    ├── .cache/              缓存、账号与临时产物（清理前须区分数据）
     │   ├── models/          模型权重
     │   ├── torch/           PyTorch 权重缓存
     │   ├── ultralytics/     ultralytics 配置
@@ -48,6 +48,9 @@ from pathlib import Path
 
 #: 仓库根目录。parents[1] = backend/paths.py -> backend -> 仓库根
 PROJECT_ROOT: Path = Path(__file__).resolve().parents[1]
+
+#: Reviewed videos, annotations and reports; not an expiring cache.
+MANUAL_DATASET_DIR: Path = PROJECT_ROOT / "data" / "manual_timing"
 
 #: 生成物根目录
 CACHE_DIR: Path = PROJECT_ROOT / ".cache"
@@ -79,8 +82,8 @@ OUTPUT_DIR: Path = PROJECT_ROOT / "output"
 
 #: 账号与兑换码的存储文件。
 #:
-#: ⚠️ 放在 .cache/ 下意味着它**可以被安全删除** ——
-#:    但删掉之后所有账号和兑换码都没了。
+#: ⚠️ 虽然放在 .cache/ 下，它不是可再生缓存；
+#:    删掉之后所有账号和兑换码都会丢失，清理前须备份。
 #:    开发期这样很方便；真要上线应当移到不会被清理的位置，
 #:    并换成数据库（见 backend/server/accounts.py 的说明）。
 ACCOUNTS_FILE: Path = CACHE_DIR / "accounts.json"

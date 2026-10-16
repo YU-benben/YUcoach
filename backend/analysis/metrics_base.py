@@ -234,6 +234,11 @@ class MetricResult:
     #: 数据不足时的说明
     insufficient: dict | None = None
 
+    # 内部匹配元数据，不直接加入有严格Schema的报告JSON。
+    reference_window: str | None = None
+    reference_phase: str | None = None
+    step_number: int | None = None
+
     def to_contract_dict(self, spec: MetricSpec, view: str) -> dict:
         out: dict = {
             "metric_id": self.metric_id,

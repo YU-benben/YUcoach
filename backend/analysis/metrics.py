@@ -56,6 +56,17 @@ class MetricContext:
     camera_motion_level: str = "fixed"
     camera_motion_shift: float = 0.0
 
+    athlete_gender: str | None = None
+    athlete_event: str | None = None
+    athlete_level: str | None = None
+    athlete_age: float | None = None
+    running_condition: str | None = None
+    load_protocol: str | None = None
+    # 明确确认包含完整专项距离，而非普通短片段。
+    complete_run: bool = False
+
+    manual_events: list[dict] | None = None
+
     # 关键点可见率缓存
     _coverage: dict[str, float] | None = None
 
@@ -333,14 +344,14 @@ def metric_trunk_lean(ctx: MetricContext) -> MetricResult:
     return MetricResult(
         metric_id=spec.metric_id,
         value=round(main_value, 2),
+        reference_window="whole_phase",
         aggregate=agg or None,
         valid_frame_count=len(fidx),
         total_frame_count=len(ctx.seq.frames),
         confidence=0.8,
         reliability_note=(
-            "各相位的正常范围不同：加速段前倾 45–60° 是正确的，"
-            "途中跑 5–15° 才是正确的。同一个角度值在不同相位含义相反，"
-            "所以判定偏差时必须按相位分别对照。"
+            "此值由躯干关键点计算；不同阶段分别统计。"
+            "只有匹配同人群、同阶段及同测量窗口的参考后才能判断偏差。"
         ),
     )
 
@@ -470,6 +481,8 @@ def metric_step_frequency(ctx: MetricContext) -> MetricResult:
     return MetricResult(
         metric_id=spec.metric_id,
         value=round(float(value), 1),
+        reference_phase="whole_run" if ctx.complete_run else None,
+        reference_window="whole_run" if ctx.complete_run else None,
         aggregate=aggregate_block(
             n=len(ctx.events.midstances) if ctx.events.midstances else 1,
             mean=float(value),
@@ -676,10 +689,9 @@ def metric_knee_angle_touchdown(ctx: MetricContext) -> MetricResult:
             ),
         )
 
-    vals = [
-        v for td in tds
-        if (v := _value_at(idxs, angs, td)) is not None
-    ]
+    samples = [(td, v) for td in tds
+               if (v := _value_at(idxs, angs, td)) is not None]
+    vals = [v for _, v in samples]
     if not vals:
         return MetricResult(
             metric_id=spec.metric_id,
@@ -704,16 +716,26 @@ def metric_knee_angle_touchdown(ctx: MetricContext) -> MetricResult:
             "数值仅供趋势参考，不足以支撑精确的技术诊断。"
         )
 
+    per_phase: dict[str, list[float]] = {}
+    for td, v in samples:
+        per_phase.setdefault(ctx.phase_of(td), []).append(v)
+    phase_stats = {
+        ph: aggregate_block(n=len(vs), mean=float(np.mean(vs)),
+                            sd=float(np.std(vs)), min_value=float(np.min(vs)),
+                            max_value=float(np.max(vs)))
+        for ph, vs in per_phase.items()
+    }
     return MetricResult(
         metric_id=spec.metric_id,
         value=round(float(np.mean(vals)), 1),
-        aggregate=aggregate_block(
+        reference_window="event_mean",
+        aggregate={**aggregate_block(
             n=len(vals),
             mean=float(np.mean(vals)),
             sd=float(np.std(vals)),
             min_value=float(np.min(vals)),
             max_value=float(np.max(vals)),
-        ),
+        ), **phase_stats},
         valid_frame_count=len(idxs),
         total_frame_count=len(ctx.seq.frames),
         confidence=0.45 if derived else 0.75,
@@ -2403,6 +2425,9 @@ def compute_all_metrics(ctx: MetricContext) -> list[MetricResult]:
     原因写明"尚未实现" —— 这比静默省略好：
     教练会注意到少了一项，但不知道是"没测出来"还是"没做"。
     """
+    if ctx.manual_events is not None:
+        from .manual_timing import timing_metrics
+        return timing_metrics(ctx.manual_events, ctx.fps)
     results: list[MetricResult] = []
 
     for metric_id, spec in METRIC_SPECS.items():
